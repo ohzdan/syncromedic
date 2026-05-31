@@ -7,6 +7,7 @@ import Link from "next/link";
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [pacientes, setPacientes] = useState<any[]>([]);
+  const [rol, setRol] = useState<'familia' | 'especialista' | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
@@ -17,14 +18,31 @@ export default function Dashboard() {
       if (!user) { router.push("/"); return; }
       setUser(user);
 
-      const { data } = await supabase
-        .from("pacientes")
-        .select("*")
-        .eq("familia_id", user.id)
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+      const rolDetectado = user.user_metadata?.rol || 'familia';
+      setRol(rolDetectado);
 
-      setPacientes(data || []);
+      if (rolDetectado === 'especialista') {
+        // El médico ve los pacientes a los que fue invitado
+        const { data: accesos } = await supabase
+          .from("expediente_accesos")
+          .select("paciente_id, pacientes(*)")
+          .eq("usuario_id", user.id)
+          .eq("estado", "activo");
+
+        const listaPacientes = accesos?.map((a: any) => a.pacientes).filter(Boolean) || [];
+        setPacientes(listaPacientes);
+      } else {
+        // La familia ve sus propios pacientes
+        const { data } = await supabase
+          .from("pacientes")
+          .select("*")
+          .eq("familia_id", user.id)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false });
+
+        setPacientes(data || []);
+      }
+
       setLoading(false);
     }
     cargarDatos();
@@ -46,6 +64,8 @@ export default function Dashboard() {
 
   if (!user) return null;
 
+  const esMedico = rol === 'especialista';
+
   return (
     <main className="min-h-screen bg-slate-50">
       <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
@@ -59,8 +79,13 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-4">
           <span className="text-slate-500 text-sm">
-            {user.user_metadata?.full_name || user.email}
+            {user.user_metadata?.nombre || user.user_metadata?.full_name || user.email}
           </span>
+          {esMedico && (
+            <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded-full font-semibold">
+              {user.user_metadata?.especialidad || 'Especialista'}
+            </span>
+          )}
           <button onClick={handleLogout} className="text-slate-400 hover:text-slate-700 text-sm transition-colors">
             Salir
           </button>
@@ -71,37 +96,51 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-slate-900 text-2xl font-semibold">
-              Hola, {user.user_metadata?.full_name?.split(" ")[0] || "familia"} 👋
+              {esMedico
+                ? `Hola, Dr. ${user.user_metadata?.nombre?.split(" ")[0] || ''} 👋`
+                : `Hola, ${user.user_metadata?.full_name?.split(" ")[0] || 'familia'} 👋`}
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              {pacientes.length === 0
-                ? "Aún no tienes expedientes registrados"
-                : `${pacientes.length} expediente${pacientes.length > 1 ? "s" : ""} activo${pacientes.length > 1 ? "s" : ""}`}
+              {esMedico
+                ? pacientes.length === 0
+                  ? "Aún no tienes pacientes asignados"
+                  : `${pacientes.length} paciente${pacientes.length > 1 ? 's' : ''} bajo tu cuidado`
+                : pacientes.length === 0
+                  ? "Aún no tienes expedientes registrados"
+                  : `${pacientes.length} expediente${pacientes.length > 1 ? 's' : ''} activo${pacientes.length > 1 ? 's' : ''}`}
             </p>
           </div>
-          <Link
-            href="/paciente/nuevo"
-            className="bg-[#1A6BFF] hover:bg-[#1558d6] text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
-          >
-            + Nuevo paciente
-          </Link>
+          {!esMedico && (
+            <Link
+              href="/paciente/nuevo"
+              className="bg-[#1A6BFF] hover:bg-[#1558d6] text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
+            >
+              + Nuevo paciente
+            </Link>
+          )}
         </div>
 
         {loading ? (
           <div className="text-slate-400 text-sm">Cargando...</div>
         ) : pacientes.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
-            <p className="text-4xl mb-4">👶</p>
-            <h2 className="text-slate-900 font-semibold mb-2">Registra tu primer paciente</h2>
+            <p className="text-4xl mb-4">{esMedico ? '🩺' : '👶'}</p>
+            <h2 className="text-slate-900 font-semibold mb-2">
+              {esMedico ? 'Sin pacientes asignados' : 'Registra tu primer paciente'}
+            </h2>
             <p className="text-slate-500 text-sm mb-6">
-              Crea el expediente de tu hijo para empezar a coordinar su equipo médico
+              {esMedico
+                ? 'Cuando una familia te invite, verás sus pacientes aquí'
+                : 'Crea el expediente de tu hijo para empezar a coordinar su equipo médico'}
             </p>
-            <Link
-              href="/paciente/nuevo"
-              className="bg-[#1A6BFF] hover:bg-[#1558d6] text-white text-sm font-semibold px-6 py-3 rounded-xl transition-colors inline-block"
-            >
-              Crear expediente
-            </Link>
+            {!esMedico && (
+              <Link
+                href="/paciente/nuevo"
+                className="bg-[#1A6BFF] hover:bg-[#1558d6] text-white text-sm font-semibold px-6 py-3 rounded-xl transition-colors inline-block"
+              >
+                Crear expediente
+              </Link>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -130,6 +169,9 @@ export default function Dashboard() {
                       </span>
                     ))}
                   </div>
+                )}
+                {esMedico && (
+                  <p className="text-xs text-slate-400 mt-3">Expediente compartido contigo</p>
                 )}
               </Link>
             ))}
