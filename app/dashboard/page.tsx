@@ -22,17 +22,24 @@ export default function Dashboard() {
       setRol(rolDetectado);
 
       if (rolDetectado === 'especialista') {
-        // El médico ve los pacientes a los que fue invitado
         const { data: accesos } = await supabase
           .from("expediente_accesos")
-          .select("paciente_id, pacientes(*)")
+          .select("paciente_id")
           .eq("usuario_id", user.id)
           .eq("estado", "activo");
 
-        const listaPacientes = accesos?.map((a: any) => a.pacientes).filter(Boolean) || [];
-        setPacientes(listaPacientes);
+        const ids = (accesos || []).map((a: any) => a.paciente_id);
+
+        if (ids.length > 0) {
+          const { data: pacientesData } = await supabase
+            .from("pacientes")
+            .select("*")
+            .in("id", ids);
+          setPacientes(pacientesData || []);
+        } else {
+          setPacientes([]);
+        }
       } else {
-        // La familia ve sus propios pacientes
         const { data } = await supabase
           .from("pacientes")
           .select("*")
