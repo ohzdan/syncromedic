@@ -354,7 +354,7 @@ export default function ScoutingPage() {
               tags={tags} tagInput={tagInput}
               onInputChange={setTagInput}
               onAgregar={agregarTag}
-              onQuitar={t => setTags(tags.filter(x => x !== t))}
+              onQuitar={(t: string) => setTags(tags.filter((x: string) => x !== t))}
             />
           )}
 
@@ -368,7 +368,7 @@ export default function ScoutingPage() {
               tags={tags} tagInput={tagInput}
               onInputChange={setTagInput}
               onAgregar={agregarTag}
-              onQuitar={t => setTags(tags.filter(x => x !== t))}
+              onQuitar={(t: string) => setTags(tags.filter((x: string) => x !== t))}
             />
           )}
 
