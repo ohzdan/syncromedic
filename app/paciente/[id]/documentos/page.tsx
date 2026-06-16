@@ -108,6 +108,7 @@ export default function DocumentosPage() {
       return;
     }
 
+    const { data: { user: uploadUser } } = await supabase.auth.getUser();
     const { error: dbError } = await supabase.from("documentos").insert({
       paciente_id: pacienteId,
       nombre,
@@ -115,6 +116,8 @@ export default function DocumentosPage() {
       archivo_path: path,
       archivo_url: path,
       tipo_archivo: archivo.type,
+      subido_por: uploadUser!.id,
+      tipo: categoria,
     });
 
     if (dbError) {
