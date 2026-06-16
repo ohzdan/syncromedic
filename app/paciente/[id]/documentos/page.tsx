@@ -15,6 +15,7 @@ type Documento = {
   id: string;
   nombre: string;
   categoria: string;
+  tipo: string;
   archivo_url: string;
   archivo_path: string;
   tipo_archivo: string;
@@ -35,18 +36,15 @@ export default function DocumentosPage() {
   const [error, setError] = useState("");
   const [rol, setRol] = useState("");
 
-  // Modal nuevo documento
   const [modalAbierto, setModalAbierto] = useState(false);
   const [nombre, setNombre] = useState("");
   const [categoria, setCategoria] = useState("");
   const [archivo, setArchivo] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
 
-  // Visor
   const [docVisor, setDocVisor] = useState<Documento | null>(null);
   const [urlVisor, setUrlVisor] = useState<string | null>(null);
 
-  // Filtro
   const [filtro, setFiltro] = useState("todos");
 
   useEffect(() => { cargarDatos(); }, []);
@@ -108,15 +106,16 @@ export default function DocumentosPage() {
       return;
     }
 
-    const { data: { user: uploadUser } } = await supabase.auth.getUser();
+    const { data: { user } } = await supabase.auth.getUser();
+
     const { error: dbError } = await supabase.from("documentos").insert({
       paciente_id: pacienteId,
-      nombre,
-      categoria,
+      nombre: nombre,
+      categoria: categoria,
       archivo_path: path,
       archivo_url: path,
       tipo_archivo: archivo.type,
-      subido_por: uploadUser!.id,
+      subido_por: user!.id,
       tipo: categoria,
     });
 
@@ -127,7 +126,10 @@ export default function DocumentosPage() {
     }
 
     setModalAbierto(false);
-    setNombre(""); setCategoria(""); setArchivo(null); setPreview(null);
+    setNombre("");
+    setCategoria("");
+    setArchivo(null);
+    setPreview(null);
     await cargarDocumentos();
     setSubiendo(false);
   }
@@ -150,7 +152,7 @@ export default function DocumentosPage() {
   }
 
   const esFamilia = rol === "familia";
-  const docsFiltrados = filtro === "todos" ? documentos : documentos.filter(d => d.categoria === filtro);
+  const docsFiltrados = filtro === "todos" ? documentos : documentos.filter(d => (d.categoria || d.tipo) === filtro);
 
   if (loading) return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -171,7 +173,6 @@ export default function DocumentosPage() {
       </nav>
 
       <div className="max-w-2xl mx-auto px-6 py-8">
-        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-slate-800 text-2xl font-bold">Documentos</h1>
@@ -187,7 +188,6 @@ export default function DocumentosPage() {
           )}
         </div>
 
-        {/* Filtros */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {[{ id: "todos", label: "Todos", emoji: "📁" }, ...CATEGORIAS].map(c => (
             <button
@@ -200,7 +200,6 @@ export default function DocumentosPage() {
           ))}
         </div>
 
-        {/* Lista de documentos */}
         {docsFiltrados.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
             <div className="text-4xl mb-3">📂</div>
@@ -216,7 +215,7 @@ export default function DocumentosPage() {
         ) : (
           <div className="flex flex-col gap-3">
             {docsFiltrados.map(doc => {
-              const cat = CATEGORIAS.find(c => c.id === doc.categoria);
+              const cat = CATEGORIAS.find(c => c.id === (doc.categoria || doc.tipo));
               const esImagen = doc.tipo_archivo?.startsWith("image/");
               const fecha = new Date(doc.created_at).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
               return (
@@ -231,14 +230,14 @@ export default function DocumentosPage() {
                   <div className="flex gap-2 flex-shrink-0">
                     <button
                       onClick={() => abrirDocumento(doc)}
-                      className="text-[#1A6BFF] text-xs font-medium hover:underline px-3 py-1.5 border border-[#1A6BFF] rounded-lg transition-colors hover:bg-blue-50"
+                      className="text-[#1A6BFF] text-xs font-medium px-3 py-1.5 border border-[#1A6BFF] rounded-lg transition-colors hover:bg-blue-50"
                     >
                       Ver
                     </button>
                     {esFamilia && (
                       <button
                         onClick={() => eliminarDocumento(doc)}
-                        className="text-red-400 text-xs font-medium hover:underline px-3 py-1.5 border border-red-200 rounded-lg transition-colors hover:bg-red-50"
+                        className="text-red-400 text-xs font-medium px-3 py-1.5 border border-red-200 rounded-lg transition-colors hover:bg-red-50"
                       >
                         Eliminar
                       </button>
@@ -251,12 +250,10 @@ export default function DocumentosPage() {
         )}
       </div>
 
-      {/* Modal subir documento */}
       {modalAbierto && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
             <h2 className="text-slate-800 text-lg font-bold mb-5">Subir documento</h2>
-
             <div className="flex flex-col gap-4">
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Nombre del documento *</label>
@@ -268,7 +265,6 @@ export default function DocumentosPage() {
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
                 />
               </div>
-
               <div>
                 <label className="text-slate-500 text-xs mb-2 block">Categoría *</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -283,7 +279,6 @@ export default function DocumentosPage() {
                   ))}
                 </div>
               </div>
-
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Archivo *</label>
                 <div
@@ -314,9 +309,7 @@ export default function DocumentosPage() {
                   className="hidden"
                 />
               </div>
-
               {error && <p className="text-red-500 text-sm">{error}</p>}
-
               <div className="flex gap-3 mt-2">
                 <button
                   onClick={() => { setModalAbierto(false); setNombre(""); setCategoria(""); setArchivo(null); setPreview(null); setError(""); }}
@@ -337,14 +330,13 @@ export default function DocumentosPage() {
         </div>
       )}
 
-      {/* Visor de documento */}
       {docVisor && urlVisor && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] flex flex-col shadow-xl">
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
               <div>
                 <p className="text-slate-800 text-sm font-semibold">{docVisor.nombre}</p>
-                <p className="text-slate-400 text-xs">{CATEGORIAS.find(c => c.id === docVisor.categoria)?.label}</p>
+                <p className="text-slate-400 text-xs">{CATEGORIAS.find(c => c.id === (docVisor.categoria || docVisor.tipo))?.label}</p>
               </div>
               <div className="flex gap-3 items-center">
                 <a href={urlVisor} target="_blank" rel="noopener noreferrer" className="text-[#1A6BFF] text-xs font-medium hover:underline">
