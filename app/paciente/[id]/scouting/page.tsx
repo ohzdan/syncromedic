@@ -24,13 +24,44 @@ const ANTECEDENTES_FAMILIARES = [
   { id: "hipertension", label: "Hipertensión" },
   { id: "corazon", label: "Enfermedades del corazón" },
   { id: "epilepsia", label: "Epilepsia o convulsiones" },
+  { id: "asma", label: "Asma" },
+  { id: "alergias", label: "Alergias alimentarias o ambientales" },
   { id: "autoinmune", label: "Enfermedades autoinmunes (artritis, lupus, etc.)" },
   { id: "cancer", label: "Cáncer" },
   { id: "neurodesarrollo", label: "Trastornos del neurodesarrollo (autismo, TDAH, etc.)" },
   { id: "mental", label: "Enfermedades mentales (depresión, esquizofrenia, etc.)" },
+  { id: "genetica", label: "Enfermedades genéticas conocidas" },
 ];
 
 const PARENTESCOS = ["Papá", "Mamá", "Hermano/a", "Abuelo/a paterno/a", "Abuelo/a materno/a", "Ninguno", "No sé"];
+
+const CONDICIONES_CRONICAS = [
+  "Asma o sibilancias",
+  "Rinitis alérgica",
+  "Dermatitis atópica o eccemas",
+  "Ronquido nocturno frecuente",
+  "Apneas del sueño",
+  "Infecciones frecuentes de oído u otitis",
+  "Neumonías o bronquitis previas",
+  "Reflujo gastroesofágico o vómitos frecuentes",
+  "Dolor abdominal recurrente",
+  "Estreñimiento crónico",
+  "Convulsiones o episodios de pérdida de alerta",
+  "Soplos cardíacos diagnosticados",
+  "Infecciones urinarias frecuentes",
+  "Enfermedades autoinmunes",
+];
+
+const TERAPIAS = [
+  "Terapia de lenguaje",
+  "Terapia física",
+  "Terapia ocupacional",
+  "Terapia de neurodesarrollo",
+  "Psicología",
+  "Musicoterapia",
+  "ABA (Análisis de conducta aplicado)",
+  "Otra",
+];
 
 type Pantalla =
   | { tipo: "intro" }
@@ -49,8 +80,15 @@ const FLUJO: Pantalla[] = [
   { tipo: "paso", id: "parto" },
   { tipo: "paso", id: "nacimiento" },
   { tipo: "paso", id: "ucin_apgar" },
-  { tipo: "intermedia", mensaje: "Ya casi 💪", submensaje: "Ahora antecedentes familiares. Responde solo lo que sepas — puedes omitir lo que no recuerdes." },
+  { tipo: "paso", id: "tamices" },
+  { tipo: "intermedia", mensaje: "Muy bien 💪", submensaje: "Ahora algunas preguntas sobre el desarrollo de tu hijo/a. Responde lo que recuerdes — no hay respuestas incorrectas." },
+  { tipo: "paso", id: "desarrollo_motor" },
+  { tipo: "paso", id: "desarrollo_lenguaje" },
+  { tipo: "paso", id: "terapias" },
+  { tipo: "intermedia", mensaje: "Ya casi 🏁", submensaje: "Ahora antecedentes familiares y un breve historial médico. Solo lo que sepas." },
   { tipo: "paso", id: "antecedentes_familiares" },
+  { tipo: "paso", id: "historial_medico" },
+  { tipo: "paso", id: "condiciones_cronicas" },
   { tipo: "intermedia", mensaje: "Una sección más 📋", submensaje: "Ten tu cartilla de vacunación a la mano para la siguiente parte. Si no la tienes ahorita, puedes omitir y completarla después." },
   { tipo: "paso", id: "vacunas" },
   { tipo: "paso", id: "emergencia" },
@@ -68,22 +106,45 @@ export default function ScoutingPage() {
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
 
-  // Estado de campos
   const [tagInput, setTagInput] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [selectVal, setSelectVal] = useState("");
   const [texto1, setTexto1] = useState("");
-  const [texto2, setTexto2] = useState("");
   const [bool1, setBool1] = useState("");
   const [bool2, setBool2] = useState("");
   const [vacunasSeleccionadas, setVacunasSeleccionadas] = useState<string[]>([]);
   const [vacunasOtras, setVacunasOtras] = useState("");
-  const [antFamiliares, setAntFamiliares] = useState<Record<string, string>>({});
+  const [antFamiliares, setAntFamiliares] = useState<Record<string, string[]>>({});
   const [contactoNombre, setContactoNombre] = useState("");
   const [contactoTel, setContactoTel] = useState("");
   const [contactoParentesco, setContactoParentesco] = useState("");
   const [hospitalPref, setHospitalPref] = useState("");
   const [medicoCabecera, setMedicoCabecera] = useState("");
+  const [seguroMedico, setSeguroMedico] = useState("");
+  const [aseguradora, setAseguradora] = useState("");
+  const [condicionesSeleccionadas, setCondicionesSeleccionadas] = useState<string[]>([]);
+  const [terapiasSeleccionadas, setTerapiasSeleccionadas] = useState<string[]>([]);
+
+  // Desarrollo motor
+  const [edadCabeza, setEdadCabeza] = useState("");
+  const [edadSentado, setEdadSentado] = useState("");
+  const [edadGateo, setEdadGateo] = useState("");
+  const [edadCamino, setEdadCamino] = useState("");
+  const [retrasoMotor, setRetrasoMotor] = useState("");
+
+  // Desarrollo lenguaje
+  const [edadPalabras, setEdadPalabras] = useState("");
+  const [retrasoLenguaje, setRetrasoLenguaje] = useState("");
+  const [regresiones, setRegresiones] = useState("");
+
+  // Historial
+  const [cirugias, setCirugias] = useState("");
+  const [hospitalizaciones, setHospitalizaciones] = useState("");
+
+  // Tamices
+  const [tamizMetabolico, setTamizMetabolico] = useState("");
+  const [tamizAuditivo, setTamizAuditivo] = useState("");
+  const [tamizCardiaco, setTamizCardiaco] = useState("");
 
   useEffect(() => { cargarPaciente(); }, []);
 
@@ -91,30 +152,40 @@ export default function ScoutingPage() {
     const { data } = await supabase.from("pacientes").select("*").eq("id", pacienteId).single();
     if (data) {
       setPaciente(data);
-      const pasoGuardado = data.scouting_paso || 0;
-      // Encontrar el índice correspondiente al paso guardado
-      const idx = Math.min(pasoGuardado, FLUJO.length - 1);
+      const idx = Math.min(data.scouting_paso || 0, FLUJO.length - 1);
       setIndice(idx);
-      cargarEstado(data);
+      cargarEstadoGlobal(data);
     }
     setLoading(false);
   }
 
-  function cargarEstado(data: any) {
-    setTags(data.diagnosticos_principales || []);
+  function cargarEstadoGlobal(data: any) {
     setVacunasSeleccionadas(data.vacunas?.lista || []);
     setVacunasOtras(data.vacunas_otras || "");
     setAntFamiliares(data.antecedentes_familiares_detalle || {});
+    setCondicionesSeleccionadas(data.condiciones_cronicas || []);
+    setTerapiasSeleccionadas(data.terapias_actuales || []);
     const c = data.contacto_emergencia || {};
     setContactoNombre(c.nombre || "");
     setContactoTel(c.telefono || "");
     setContactoParentesco(c.parentesco || "");
     setHospitalPref(data.hospital_preferencia || "");
     setMedicoCabecera(data.medico_cabecera || "");
+    setSeguroMedico(data.seguro_medico || "");
+    setAseguradora(data.aseguradora || "");
+    const dm = data.desarrollo_motor || {};
+    setEdadCabeza(dm.cabeza || ""); setEdadSentado(dm.sentado || ""); setEdadGateo(dm.gateo || ""); setEdadCamino(dm.camino || ""); setRetrasoMotor(dm.retraso || "");
+    const dl = data.desarrollo_lenguaje || {};
+    setEdadPalabras(dl.primeras_palabras || ""); setRetrasoLenguaje(dl.retraso || ""); setRegresiones(dl.regresiones || "");
+    setCirugias(data.cirugias_previas || "");
+    setHospitalizaciones(data.hospitalizaciones_previas || "");
+    setTamizMetabolico(data.tamiz_metabolico || "");
+    setTamizAuditivo(data.tamiz_auditivo || "");
+    setTamizCardiaco(data.tamiz_cardiaco || "");
   }
 
   function limpiarCampos() {
-    setTagInput(""); setSelectVal(""); setTexto1(""); setTexto2(""); setBool1(""); setBool2("");
+    setTagInput(""); setSelectVal(""); setTexto1(""); setBool1(""); setBool2("");
   }
 
   function cargarPaso(id: string, data: any) {
@@ -123,10 +194,11 @@ export default function ScoutingPage() {
     if (id === "alergias") setTags(data.alergias || []);
     if (id === "tipo_sangre") setSelectVal(data.tipo_sangre || "");
     if (id === "embarazo_alto_riesgo") setBool1(data.embarazo_alto_riesgo || "");
-    if (id === "complicaciones_embarazo") { setBool1(data.complicaciones_embarazo || ""); setSelectVal(data.diabetes_gestacional || ""); }
+    if (id === "complicaciones_embarazo") { setBool1(data.complicaciones_embarazo || ""); setBool2(data.diabetes_gestacional || ""); }
     if (id === "parto") { setSelectVal(data.semanas_gestacion?.toString() || ""); setBool1(data.tipo_parto || ""); }
     if (id === "nacimiento") { setBool1(data.complicaciones_nacimiento || ""); setTexto1(data.peso_nacer || ""); }
     if (id === "ucin_apgar") { setBool1(data.requirio_ucin || ""); setTexto1(data.apgar || ""); }
+    if (id === "tamices") { setTamizMetabolico(data.tamiz_metabolico || ""); setTamizAuditivo(data.tamiz_auditivo || ""); setTamizCardiaco(data.tamiz_cardiaco || ""); }
   }
 
   async function guardarPaso(omitir = false) {
@@ -142,21 +214,28 @@ export default function ScoutingPage() {
       if (id === "alergias") update.alergias = tags;
       if (id === "tipo_sangre") update.tipo_sangre = selectVal || null;
       if (id === "embarazo_alto_riesgo") update.embarazo_alto_riesgo = bool1 || null;
-      if (id === "complicaciones_embarazo") { update.complicaciones_embarazo = bool1 || null; update.diabetes_gestacional = selectVal || null; }
+      if (id === "complicaciones_embarazo") { update.complicaciones_embarazo = bool1 || null; update.diabetes_gestacional = bool2 || null; }
       if (id === "parto") { update.semanas_gestacion = selectVal ? parseInt(selectVal) : null; update.tipo_parto = bool1 || null; }
       if (id === "nacimiento") { update.complicaciones_nacimiento = bool1 || null; update.peso_nacer = texto1 || null; }
       if (id === "ucin_apgar") { update.requirio_ucin = bool1 || null; update.apgar = texto1 || null; }
+      if (id === "tamices") { update.tamiz_metabolico = tamizMetabolico || null; update.tamiz_auditivo = tamizAuditivo || null; update.tamiz_cardiaco = tamizCardiaco || null; }
+      if (id === "desarrollo_motor") update.desarrollo_motor = { cabeza: edadCabeza, sentado: edadSentado, gateo: edadGateo, camino: edadCamino, retraso: retrasoMotor };
+      if (id === "desarrollo_lenguaje") update.desarrollo_lenguaje = { primeras_palabras: edadPalabras, retraso: retrasoLenguaje, regresiones };
+      if (id === "terapias") update.terapias_actuales = terapiasSeleccionadas;
       if (id === "antecedentes_familiares") update.antecedentes_familiares_detalle = antFamiliares;
+      if (id === "historial_medico") { update.cirugias_previas = cirugias || null; update.hospitalizaciones_previas = hospitalizaciones || null; }
+      if (id === "condiciones_cronicas") update.condiciones_cronicas = condicionesSeleccionadas;
       if (id === "vacunas") { update.vacunas = { lista: vacunasSeleccionadas }; update.vacunas_otras = vacunasOtras || null; }
       if (id === "emergencia") {
         update.contacto_emergencia = { nombre: contactoNombre, telefono: contactoTel, parentesco: contactoParentesco };
         update.hospital_preferencia = hospitalPref || null;
         update.medico_cabecera = medicoCabecera || null;
+        update.seguro_medico = seguroMedico || null;
+        update.aseguradora = aseguradora || null;
       }
     }
 
-    const esUltimoPaso = indice + 1 >= FLUJO.length - 1;
-    if (esUltimoPaso) update.scouting_completo = true;
+    if (indice + 1 >= FLUJO.length - 1) update.scouting_completo = true;
 
     await supabase.from("pacientes").update(update).eq("id", pacienteId);
     setPaciente((prev: any) => ({ ...prev, ...update }));
@@ -166,10 +245,7 @@ export default function ScoutingPage() {
 
   function avanzar() {
     const siguiente = indice + 1;
-    if (siguiente >= FLUJO.length) {
-      router.push(`/paciente/${pacienteId}`);
-      return;
-    }
+    if (siguiente >= FLUJO.length) { router.push(`/paciente/${pacienteId}`); return; }
     const sig = FLUJO[siguiente];
     if (sig.tipo === "paso") cargarPaso(sig.id, paciente || {});
     setIndice(siguiente);
@@ -187,8 +263,20 @@ export default function ScoutingPage() {
     setVacunasSeleccionadas(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
   }
 
+  function toggleCondicion(c: string) {
+    setCondicionesSeleccionadas(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c]);
+  }
+
+  function toggleTerapia(t: string) {
+    setTerapiasSeleccionadas(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+  }
+
   function toggleAntFamiliar(condId: string, parentesco: string) {
-    setAntFamiliares(prev => ({ ...prev, [condId]: parentesco }));
+    setAntFamiliares(prev => {
+      const actual = prev[condId] || [];
+      const yaEsta = actual.includes(parentesco);
+      return { ...prev, [condId]: yaEsta ? actual.filter((x: string) => x !== parentesco) : [...actual, parentesco] };
+    });
   }
 
   function agregarTag() {
@@ -197,10 +285,26 @@ export default function ScoutingPage() {
     setTagInput("");
   }
 
-  // Calcular progreso solo con pasos reales
+  function irAPaso(id: string) {
+    const idx = FLUJO.findIndex(p => p.tipo === "paso" && p.id === id);
+    if (idx >= 0) { cargarPaso(id, paciente); setIndice(idx); }
+  }
+
   const pasosTotales = FLUJO.filter(p => p.tipo === "paso").length;
   const pasosCompletados = FLUJO.slice(0, indice).filter(p => p.tipo === "paso").length;
   const progreso = Math.round((pasosCompletados / pasosTotales) * 100);
+
+  const Nav = () => (
+    <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
+          <span className="text-white font-bold text-xs">S</span>
+        </div>
+        <span className="text-slate-800 font-bold text-lg tracking-tight">Syncro<span className="text-[#00C97A]">Medic</span></span>
+      </div>
+      <Link href={`/paciente/${pacienteId}`} className="text-slate-400 hover:text-slate-600 text-sm">Completar después</Link>
+    </nav>
+  );
 
   if (loading) return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -210,52 +314,28 @@ export default function ScoutingPage() {
 
   const pantalla = FLUJO[indice];
 
-  // ── INTRO ──────────────────────────────────────────────
   if (pantalla.tipo === "intro") return (
     <main className="min-h-screen bg-slate-50 flex flex-col">
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
-            <span className="text-white font-bold text-xs">S</span>
-          </div>
-          <span className="text-slate-800 font-bold text-lg tracking-tight">Syncro<span className="text-[#00C97A]">Medic</span></span>
-        </div>
-        <Link href={`/paciente/${pacienteId}`} className="text-slate-400 hover:text-slate-600 text-sm">Completar después</Link>
-      </nav>
+      <Nav />
       <div className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-md text-center">
           <div className="text-5xl mb-6">📋</div>
           <h1 className="text-slate-800 text-2xl font-bold mb-3">Arma el perfil de {paciente?.nombre}</h1>
-          <p className="text-slate-500 text-base mb-4">
-            Vamos a hacerte una serie de preguntas sobre tu hijo/a. La información que nos des la verán todos sus especialistas antes de cada consulta.
-          </p>
+          <p className="text-slate-500 text-base mb-4">Vamos a hacerte una serie de preguntas sobre tu hijo/a. Esta información la verán todos sus especialistas antes de cada consulta.</p>
           <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-8 text-left">
-            <p className="text-blue-700 text-sm font-medium mb-1">⏱ Este proceso toma aproximadamente 10 minutos</p>
-            <p className="text-blue-600 text-sm">Solo se hace una vez. Puedes pausar en cualquier momento y continuar después — todo se guarda automáticamente.</p>
+            <p className="text-blue-700 text-sm font-medium mb-1">⏱ Este proceso toma aproximadamente 15 minutos</p>
+            <p className="text-blue-600 text-sm">Solo se hace una vez. Puedes pausar en cualquier momento — todo se guarda automáticamente.</p>
           </div>
-          <button onClick={avanzar} className="w-full bg-[#1A6BFF] hover:bg-blue-700 text-white font-semibold py-4 rounded-xl transition-colors text-lg">
-            Empezar →
-          </button>
-          <Link href={`/paciente/${pacienteId}`} className="block mt-4 text-slate-400 hover:text-slate-600 text-sm">
-            Lo hago después
-          </Link>
+          <button onClick={avanzar} className="w-full bg-[#1A6BFF] hover:bg-blue-700 text-white font-semibold py-4 rounded-xl transition-colors text-lg">Empezar →</button>
+          <Link href={`/paciente/${pacienteId}`} className="block mt-4 text-slate-400 hover:text-slate-600 text-sm">Lo hago después</Link>
         </div>
       </div>
     </main>
   );
 
-  // ── PANTALLA INTERMEDIA ────────────────────────────────
   if (pantalla.tipo === "intermedia") return (
     <main className="min-h-screen bg-slate-50 flex flex-col">
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
-            <span className="text-white font-bold text-xs">S</span>
-          </div>
-          <span className="text-slate-800 font-bold text-lg tracking-tight">Syncro<span className="text-[#00C97A]">Medic</span></span>
-        </div>
-        <Link href={`/paciente/${pacienteId}`} className="text-slate-400 hover:text-slate-600 text-sm">Completar después</Link>
-      </nav>
+      <Nav />
       <div className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-md text-center">
           <h2 className="text-slate-800 text-2xl font-bold mb-3">{pantalla.mensaje}</h2>
@@ -263,43 +343,30 @@ export default function ScoutingPage() {
           <div className="w-full bg-slate-200 rounded-full h-2 mb-8">
             <div className="bg-[#1A6BFF] h-2 rounded-full transition-all duration-500" style={{ width: `${progreso}%` }} />
           </div>
-          <button onClick={avanzar} className="w-full bg-[#1A6BFF] hover:bg-blue-700 text-white font-semibold py-4 rounded-xl transition-colors">
-            Continuar →
-          </button>
-          <button onClick={regresar} className="block w-full mt-3 text-slate-400 hover:text-slate-600 text-sm py-2">
-            ← Regresar
-          </button>
+          <button onClick={avanzar} className="w-full bg-[#1A6BFF] hover:bg-blue-700 text-white font-semibold py-4 rounded-xl transition-colors">Continuar →</button>
+          <button onClick={regresar} className="block w-full mt-3 text-slate-400 hover:text-slate-600 text-sm py-2">← Regresar</button>
         </div>
       </div>
     </main>
   );
 
-  // ── RESUMEN ────────────────────────────────────────────
   if (pantalla.tipo === "resumen") return (
     <main className="min-h-screen bg-slate-50">
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
-            <span className="text-white font-bold text-xs">S</span>
-          </div>
-          <span className="text-slate-800 font-bold text-lg tracking-tight">Syncro<span className="text-[#00C97A]">Medic</span></span>
-        </div>
-      </nav>
+      <Nav />
       <div className="max-w-xl mx-auto px-6 py-10">
         <div className="text-center mb-8">
           <div className="text-5xl mb-4">✅</div>
           <h1 className="text-slate-800 text-2xl font-bold mb-2">Perfil completado</h1>
           <p className="text-slate-500 text-sm">El expediente de {paciente?.nombre} está listo. Tus doctores ya pueden verlo.</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-6">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-6 flex flex-col">
           <ResumenItem label="Diagnósticos" valor={paciente?.diagnosticos_principales?.join(", ")} onEditar={() => irAPaso("diagnosticos")} />
           <ResumenItem label="Alergias" valor={paciente?.alergias?.join(", ")} onEditar={() => irAPaso("alergias")} />
           <ResumenItem label="Tipo de sangre" valor={paciente?.tipo_sangre} onEditar={() => irAPaso("tipo_sangre")} />
-          <ResumenItem label="Embarazo alto riesgo" valor={paciente?.embarazo_alto_riesgo} onEditar={() => irAPaso("embarazo_alto_riesgo")} />
           <ResumenItem label="Tipo de parto" valor={paciente?.tipo_parto} onEditar={() => irAPaso("parto")} />
-          <ResumenItem label="Semanas al nacer" valor={paciente?.semanas_gestacion ? `${paciente.semanas_gestacion} semanas` : null} onEditar={() => irAPaso("parto")} />
           <ResumenItem label="Peso al nacer" valor={paciente?.peso_nacer} onEditar={() => irAPaso("nacimiento")} />
           <ResumenItem label="APGAR" valor={paciente?.apgar} onEditar={() => irAPaso("ucin_apgar")} />
+          <ResumenItem label="Terapias actuales" valor={paciente?.terapias_actuales?.join(", ")} onEditar={() => irAPaso("terapias")} />
           <ResumenItem label="Vacunas registradas" valor={paciente?.vacunas?.lista?.length ? `${paciente.vacunas.lista.length} vacunas` : null} onEditar={() => irAPaso("vacunas")} />
           <ResumenItem label="Contacto de emergencia" valor={paciente?.contacto_emergencia?.nombre} onEditar={() => irAPaso("emergencia")} sinBorde />
         </div>
@@ -310,28 +377,12 @@ export default function ScoutingPage() {
     </main>
   );
 
-  function irAPaso(id: string) {
-    const idx = FLUJO.findIndex(p => p.tipo === "paso" && p.id === id);
-    if (idx >= 0) { cargarPaso(id, paciente); setIndice(idx); }
-  }
-
-  // ── PASO ──────────────────────────────────────────────
   const pasoId = (pantalla as { tipo: "paso"; id: string }).id;
 
   return (
     <main className="min-h-screen bg-slate-50">
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
-            <span className="text-white font-bold text-xs">S</span>
-          </div>
-          <span className="text-slate-800 font-bold text-lg tracking-tight">Syncro<span className="text-[#00C97A]">Medic</span></span>
-        </div>
-        <Link href={`/paciente/${pacienteId}`} className="text-slate-400 hover:text-slate-600 text-sm">Completar después</Link>
-      </nav>
-
+      <Nav />
       <div className="max-w-xl mx-auto px-6 py-8">
-        {/* Progreso */}
         <div className="mb-8">
           <div className="flex justify-between text-xs text-slate-400 mb-2">
             <span>Perfil base de {paciente?.nombre}</span>
@@ -344,156 +395,128 @@ export default function ScoutingPage() {
 
         <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
 
-          {/* DIAGNÓSTICOS */}
-          {pasoId === "diagnosticos" && (
-            <PasoTags
-              titulo="Diagnósticos principales"
-              descripcion="¿Cuáles son las condiciones o diagnósticos que tiene tu hijo/a?"
-              ayuda="Agrega uno por uno. Puedes incluir la fecha aproximada entre paréntesis."
-              placeholder="Ej: Autismo nivel 2"
-              tags={tags} tagInput={tagInput}
-              onInputChange={setTagInput}
-              onAgregar={agregarTag}
-              onQuitar={(t: string) => setTags(tags.filter((x: string) => x !== t))}
-            />
-          )}
+          {pasoId === "diagnosticos" && <PasoTags titulo="Diagnósticos principales" descripcion="¿Cuáles son las condiciones o diagnósticos que tiene tu hijo/a?" ayuda="Agrega uno por uno. Puedes incluir la fecha aproximada entre paréntesis." placeholder="Ej: Autismo nivel 2" tags={tags} tagInput={tagInput} onInputChange={setTagInput} onAgregar={agregarTag} onQuitar={(t: string) => setTags(tags.filter((x: string) => x !== t))} />}
 
-          {/* ALERGIAS */}
-          {pasoId === "alergias" && (
-            <PasoTags
-              titulo="Alergias conocidas"
-              descripcion="¿Tu hijo/a tiene alguna alergia conocida?"
-              ayuda="Incluye medicamentos, alimentos o alergias ambientales."
-              placeholder="Ej: Penicilina"
-              tags={tags} tagInput={tagInput}
-              onInputChange={setTagInput}
-              onAgregar={agregarTag}
-              onQuitar={(t: string) => setTags(tags.filter((x: string) => x !== t))}
-            />
-          )}
+          {pasoId === "alergias" && <PasoTags titulo="Alergias conocidas" descripcion="¿Tu hijo/a tiene alguna alergia conocida?" ayuda="Incluye medicamentos, alimentos o alergias ambientales." placeholder="Ej: Penicilina" tags={tags} tagInput={tagInput} onInputChange={setTagInput} onAgregar={agregarTag} onQuitar={(t: string) => setTags(tags.filter((x: string) => x !== t))} />}
 
-          {/* TIPO DE SANGRE */}
-          {pasoId === "tipo_sangre" && (
-            <PasoOpciones
-              titulo="Tipo de sangre"
-              descripcion="¿Cuál es el tipo de sangre de tu hijo/a?"
-              opciones={["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "No sé"]}
-              valor={selectVal}
-              onChange={setSelectVal}
-            />
-          )}
+          {pasoId === "tipo_sangre" && <PasoOpciones titulo="Tipo de sangre" descripcion="¿Cuál es el tipo de sangre de tu hijo/a?" opciones={["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "No sé"]} valor={selectVal} onChange={setSelectVal} />}
 
-          {/* EMBARAZO ALTO RIESGO */}
-          {pasoId === "embarazo_alto_riesgo" && (
-            <PasoOpciones
-              titulo="Embarazo de alto riesgo"
-              descripcion="¿El embarazo fue clasificado como de alto riesgo?"
-              opciones={["Sí", "No", "No sé"]}
-              valor={bool1}
-              onChange={setBool1}
-            />
-          )}
+          {pasoId === "embarazo_alto_riesgo" && <PasoOpciones titulo="Embarazo de alto riesgo" descripcion="¿El embarazo fue clasificado como de alto riesgo?" opciones={["Sí", "No", "No sé"]} valor={bool1} onChange={setBool1} />}
 
-          {/* COMPLICACIONES EMBARAZO */}
           {pasoId === "complicaciones_embarazo" && (
             <div className="flex flex-col gap-6">
-              <PasoOpciones
-                titulo="Complicaciones durante el embarazo"
-                descripcion="¿Hubo alguna complicación durante el embarazo?"
-                opciones={["Sí", "No", "No sé"]}
-                valor={bool1}
-                onChange={setBool1}
-              />
-              <div>
-                <p className="text-slate-700 text-base font-semibold mb-1">¿Hubo diabetes gestacional?</p>
-                <div className="flex flex-col gap-2 mt-2">
-                  {["Sí", "No", "No sé"].map(op => (
-                    <button key={op} onClick={() => setSelectVal(op)}
-                      className={`w-full text-left px-4 py-3 rounded-xl border text-sm font-medium transition-colors ${selectVal === op ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
-                      {op}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <PasoOpciones titulo="Complicaciones durante el embarazo" descripcion="¿Hubo alguna complicación durante el embarazo?" opciones={["Sí", "No", "No sé"]} valor={bool1} onChange={setBool1} />
+              <PasoOpciones titulo="¿Hubo diabetes gestacional?" descripcion="" opciones={["Sí", "No", "No sé"]} valor={bool2} onChange={setBool2} />
             </div>
           )}
 
-          {/* PARTO */}
           {pasoId === "parto" && (
             <div className="flex flex-col gap-6">
               <div>
-                <p className="text-slate-800 text-xl font-semibold mb-1">Semanas de gestación</p>
+                <h2 className="text-slate-800 text-xl font-semibold mb-1">Semanas de gestación</h2>
                 <p className="text-slate-500 text-sm mb-4">¿A cuántas semanas nació tu hijo/a?</p>
-                <select value={selectVal} onChange={e => setSelectVal(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]">
+                <select value={selectVal} onChange={e => setSelectVal(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]">
                   <option value="">Seleccionar</option>
                   {Array.from({ length: 20 }, (_, i) => 24 + i).map(s => (
                     <option key={s} value={s}>{s} semanas{s === 37 ? " (término temprano)" : s === 40 ? " (término)" : ""}</option>
                   ))}
                 </select>
               </div>
-              <PasoOpciones
-                titulo="Tipo de parto"
-                descripcion="¿Cómo fue el nacimiento?"
-                opciones={["Parto natural", "Cesárea programada", "Cesárea de emergencia", "Fórceps o ventosa", "No sé"]}
-                valor={bool1}
-                onChange={setBool1}
-              />
+              <PasoOpciones titulo="Tipo de parto" descripcion="¿Cómo fue el nacimiento?" opciones={["Parto natural", "Cesárea programada", "Cesárea de emergencia", "Fórceps o ventosa", "No sé"]} valor={bool1} onChange={setBool1} />
             </div>
           )}
 
-          {/* NACIMIENTO */}
           {pasoId === "nacimiento" && (
             <div className="flex flex-col gap-6">
-              <PasoOpciones
-                titulo="Complicaciones al nacer"
-                descripcion="¿Hubo alguna complicación inmediatamente después del nacimiento?"
-                opciones={["Sí", "No", "No sé"]}
-                valor={bool1}
-                onChange={setBool1}
-              />
+              <PasoOpciones titulo="Complicaciones al nacer" descripcion="¿Hubo alguna complicación inmediatamente después del nacimiento?" opciones={["Sí", "No", "No sé"]} valor={bool1} onChange={setBool1} />
               <div>
-                <p className="text-slate-700 text-base font-semibold mb-1">Peso al nacer</p>
-                <input type="text" value={texto1} onChange={e => setTexto1(e.target.value)}
-                  placeholder="Ej: 3.2 kg"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                <p className="text-slate-700 text-base font-semibold mb-2">Peso al nacer</p>
+                <input type="text" value={texto1} onChange={e => setTexto1(e.target.value)} placeholder="Ej: 3.2 kg" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
             </div>
           )}
 
-          {/* UCIN / APGAR */}
           {pasoId === "ucin_apgar" && (
             <div className="flex flex-col gap-6">
-              <PasoOpciones
-                titulo="Incubadora o UCIN"
-                descripcion="¿Tu hijo/a requirió incubadora o unidad de cuidados intensivos neonatales (UCIN)?"
-                opciones={["Sí", "No", "No sé"]}
-                valor={bool1}
-                onChange={setBool1}
-              />
+              <PasoOpciones titulo="Incubadora o UCIN" descripcion="¿Tu hijo/a requirió incubadora o UCIN?" opciones={["Sí", "No", "No sé"]} valor={bool1} onChange={setBool1} />
               <div>
                 <p className="text-slate-700 text-base font-semibold mb-1">APGAR</p>
-                <p className="text-slate-400 text-xs mb-2">Es la puntuación que le dan al bebé al nacer (del 1 al 10). Está en el resumen del hospital si lo tienes.</p>
-                <input type="text" value={texto1} onChange={e => setTexto1(e.target.value)}
-                  placeholder="Ej: 8/9 o 'No recuerdo'"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                <p className="text-slate-400 text-xs mb-2">Puntuación que le dan al bebé al nacer (1-10). Está en el resumen del hospital.</p>
+                <input type="text" value={texto1} onChange={e => setTexto1(e.target.value)} placeholder="Ej: 8/9" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
             </div>
           )}
 
-          {/* ANTECEDENTES FAMILIARES */}
+          {pasoId === "tamices" && (
+            <div className="flex flex-col gap-5">
+              <h2 className="text-slate-800 text-xl font-semibold mb-1">Tamices neonatales</h2>
+              <p className="text-slate-500 text-sm mb-2">Pruebas que se hacen al recién nacido en el hospital. Están en el alta o cartilla.</p>
+              <PasoOpciones titulo="Tamiz metabólico" descripcion="¿Pasó el tamiz metabólico neonatal?" opciones={["Sí", "No", "Pendiente", "No sé"]} valor={tamizMetabolico} onChange={setTamizMetabolico} />
+              <PasoOpciones titulo="Tamiz auditivo" descripcion="¿Pasó el tamiz auditivo?" opciones={["Sí", "No", "Pendiente", "No sé"]} valor={tamizAuditivo} onChange={setTamizAuditivo} />
+              <PasoOpciones titulo="Tamiz cardíaco" descripcion="¿Pasó el tamiz cardíaco (oximetría de pulso)?" opciones={["Sí", "No", "Pendiente", "No sé"]} valor={tamizCardiaco} onChange={setTamizCardiaco} />
+            </div>
+          )}
+
+          {pasoId === "desarrollo_motor" && (
+            <div className="flex flex-col gap-4">
+              <h2 className="text-slate-800 text-xl font-semibold mb-1">Desarrollo motor</h2>
+              <p className="text-slate-500 text-sm mb-2">Anota la edad aproximada en meses. Si no recuerdas, déjalo en blanco.</p>
+              {[
+                { label: "¿A qué edad sostuvo la cabeza solo?", val: edadCabeza, set: setEdadCabeza, placeholder: "Ej: 3 meses" },
+                { label: "¿A qué edad se sentó sin apoyo?", val: edadSentado, set: setEdadSentado, placeholder: "Ej: 6 meses" },
+                { label: "¿A qué edad gateó?", val: edadGateo, set: setEdadGateo, placeholder: "Ej: 9 meses" },
+                { label: "¿A qué edad caminó sin ayuda?", val: edadCamino, set: setEdadCamino, placeholder: "Ej: 14 meses" },
+              ].map(({ label, val, set, placeholder }) => (
+                <div key={label}>
+                  <label className="text-slate-600 text-sm mb-1 block">{label}</label>
+                  <input type="text" value={val} onChange={e => set(e.target.value)} placeholder={placeholder} className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                </div>
+              ))}
+              <PasoOpciones titulo="¿Tiene diagnóstico de retraso motor?" descripcion="" opciones={["Sí", "No", "En evaluación"]} valor={retrasoMotor} onChange={setRetrasoMotor} />
+            </div>
+          )}
+
+          {pasoId === "desarrollo_lenguaje" && (
+            <div className="flex flex-col gap-4">
+              <h2 className="text-slate-800 text-xl font-semibold mb-1">Desarrollo del lenguaje</h2>
+              <p className="text-slate-500 text-sm mb-2">Anota la edad aproximada en meses.</p>
+              <div>
+                <label className="text-slate-600 text-sm mb-1 block">¿A qué edad dijo sus primeras palabras con significado?</label>
+                <input type="text" value={edadPalabras} onChange={e => setEdadPalabras(e.target.value)} placeholder="Ej: 12 meses" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+              </div>
+              <PasoOpciones titulo="¿Tiene diagnóstico de retraso en el lenguaje?" descripcion="" opciones={["Sí", "No", "En evaluación"]} valor={retrasoLenguaje} onChange={setRetrasoLenguaje} />
+              <PasoOpciones titulo="¿Ha tenido regresiones recientes en el lenguaje?" descripcion="Pérdida de palabras o habilidades que ya tenía" opciones={["Sí", "No"]} valor={regresiones} onChange={setRegresiones} />
+            </div>
+          )}
+
+          {pasoId === "terapias" && (
+            <div>
+              <h2 className="text-slate-800 text-xl font-semibold mb-1">Terapias actuales</h2>
+              <p className="text-slate-500 text-sm mb-5">¿Tu hijo/a recibe o ha recibido alguna terapia?</p>
+              <div className="flex flex-col gap-2">
+                {TERAPIAS.map(t => (
+                  <button key={t} onClick={() => toggleTerapia(t)} className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-colors flex items-center gap-3 ${terapiasSeleccionadas.includes(t) ? "border-[#00C97A] bg-green-50 text-green-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                    <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${terapiasSeleccionadas.includes(t) ? "border-[#00C97A] bg-[#00C97A]" : "border-slate-300"}`}>
+                      {terapiasSeleccionadas.includes(t) && <span className="text-white text-xs">✓</span>}
+                    </span>
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {pasoId === "antecedentes_familiares" && (
             <div>
               <h2 className="text-slate-800 text-xl font-semibold mb-1">Antecedentes familiares</h2>
-              <p className="text-slate-500 text-sm mb-6">Para cada condición, indica si alguien en la familia directa la tiene.</p>
+              <p className="text-slate-500 text-sm mb-6">Para cada condición, indica quién en la familia directa la tiene. Puedes seleccionar varios.</p>
               <div className="flex flex-col gap-5">
                 {ANTECEDENTES_FAMILIARES.map(({ id, label }) => (
                   <div key={id}>
                     <p className="text-slate-700 text-sm font-medium mb-2">{label}</p>
                     <div className="flex flex-wrap gap-2">
                       {PARENTESCOS.map(p => (
-                        <button key={p} onClick={() => toggleAntFamiliar(id, antFamiliares[id] === p ? "" : p)}
-                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${antFamiliares[id] === p ? "bg-[#1A6BFF] border-[#1A6BFF] text-white" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                        <button key={p} onClick={() => toggleAntFamiliar(id, p)} className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${(antFamiliares[id] || []).includes(p) ? "bg-[#1A6BFF] border-[#1A6BFF] text-white" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
                           {p}
                         </button>
                       ))}
@@ -504,16 +527,45 @@ export default function ScoutingPage() {
             </div>
           )}
 
-          {/* VACUNAS */}
+          {pasoId === "historial_medico" && (
+            <div className="flex flex-col gap-5">
+              <h2 className="text-slate-800 text-xl font-semibold mb-1">Historial médico</h2>
+              <div>
+                <label className="text-slate-600 text-sm mb-1 block">¿Ha tenido cirugías previas?</label>
+                <textarea value={cirugias} onChange={e => setCirugias(e.target.value)} placeholder="Ej: Adenoidectomía (2023), colocación de tubos en oídos (2022)" rows={3} className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
+              </div>
+              <div>
+                <label className="text-slate-600 text-sm mb-1 block">¿Ha tenido hospitalizaciones previas?</label>
+                <textarea value={hospitalizaciones} onChange={e => setHospitalizaciones(e.target.value)} placeholder="Ej: Neumonía (2023), 5 días en Hospital Ángeles" rows={3} className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
+              </div>
+            </div>
+          )}
+
+          {pasoId === "condiciones_cronicas" && (
+            <div>
+              <h2 className="text-slate-800 text-xl font-semibold mb-1">Condiciones frecuentes o crónicas</h2>
+              <p className="text-slate-500 text-sm mb-5">Marca las que tu hijo/a presenta o ha presentado de manera frecuente.</p>
+              <div className="flex flex-col gap-2">
+                {CONDICIONES_CRONICAS.map(c => (
+                  <button key={c} onClick={() => toggleCondicion(c)} className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-colors flex items-center gap-3 ${condicionesSeleccionadas.includes(c) ? "border-[#1A6BFF] bg-blue-50 text-blue-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                    <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${condicionesSeleccionadas.includes(c) ? "border-[#1A6BFF] bg-[#1A6BFF]" : "border-slate-300"}`}>
+                      {condicionesSeleccionadas.includes(c) && <span className="text-white text-xs">✓</span>}
+                    </span>
+                    {c}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {pasoId === "vacunas" && (
             <div>
               <h2 className="text-slate-800 text-xl font-semibold mb-1">Vacunación</h2>
-              <p className="text-slate-500 text-sm mb-2">Marca las vacunas que tu hijo/a ya tiene. Ten tu cartilla a la mano si puedes.</p>
-              <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2 mb-5">Si no tienes la cartilla ahorita, puedes omitir y completar después.</p>
+              <p className="text-slate-500 text-sm mb-2">Marca las vacunas que tu hijo/a ya tiene.</p>
+              <p className="text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2 mb-5">Ten tu cartilla a la mano. Si no la tienes ahorita puedes omitir y completar después.</p>
               <div className="flex flex-col gap-2 mb-5">
                 {VACUNAS_MEXICO.map(v => (
-                  <button key={v} onClick={() => toggleVacuna(v)}
-                    className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-colors flex items-center gap-3 ${vacunasSeleccionadas.includes(v) ? "border-[#00C97A] bg-green-50 text-green-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                  <button key={v} onClick={() => toggleVacuna(v)} className={`w-full text-left px-4 py-3 rounded-xl border text-sm transition-colors flex items-center gap-3 ${vacunasSeleccionadas.includes(v) ? "border-[#00C97A] bg-green-50 text-green-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
                     <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${vacunasSeleccionadas.includes(v) ? "border-[#00C97A] bg-[#00C97A]" : "border-slate-300"}`}>
                       {vacunasSeleccionadas.includes(v) && <span className="text-white text-xs">✓</span>}
                     </span>
@@ -523,66 +575,55 @@ export default function ScoutingPage() {
               </div>
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Otras vacunas no listadas</label>
-                <input type="text" value={vacunasOtras} onChange={e => setVacunasOtras(e.target.value)}
-                  placeholder="Ej: Varicela refuerzo, Meningocócica B"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                <input type="text" value={vacunasOtras} onChange={e => setVacunasOtras(e.target.value)} placeholder="Ej: Meningocócica B, Rotavirus adicional" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
             </div>
           )}
 
-          {/* EMERGENCIA */}
           {pasoId === "emergencia" && (
             <div className="flex flex-col gap-4">
               <h2 className="text-slate-800 text-xl font-semibold mb-1">Contacto de emergencia</h2>
-              <p className="text-slate-500 text-sm mb-2">¿A quién contactamos en caso de emergencia?</p>
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Nombre</label>
-                <input type="text" value={contactoNombre} onChange={e => setContactoNombre(e.target.value)}
-                  placeholder="Ej: María González"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                <input type="text" value={contactoNombre} onChange={e => setContactoNombre(e.target.value)} placeholder="Ej: María González" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-slate-500 text-xs mb-1 block">Teléfono</label>
-                  <input type="tel" value={contactoTel} onChange={e => setContactoTel(e.target.value)}
-                    placeholder="55 1234 5678"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                  <input type="tel" value={contactoTel} onChange={e => setContactoTel(e.target.value)} placeholder="55 1234 5678" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                 </div>
                 <div>
                   <label className="text-slate-500 text-xs mb-1 block">Parentesco</label>
-                  <input type="text" value={contactoParentesco} onChange={e => setContactoParentesco(e.target.value)}
-                    placeholder="Ej: Mamá"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                  <input type="text" value={contactoParentesco} onChange={e => setContactoParentesco(e.target.value)} placeholder="Ej: Tía" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                 </div>
               </div>
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Hospital o clínica de preferencia</label>
-                <input type="text" value={hospitalPref} onChange={e => setHospitalPref(e.target.value)}
-                  placeholder="Ej: Hospital Ángeles Pedregal"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                <input type="text" value={hospitalPref} onChange={e => setHospitalPref(e.target.value)} placeholder="Ej: Hospital Ángeles Pedregal" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Médico de cabecera o pediatra</label>
-                <input type="text" value={medicoCabecera} onChange={e => setMedicoCabecera(e.target.value)}
-                  placeholder="Ej: Dr. Ramírez — Pediatría"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                <input type="text" value={medicoCabecera} onChange={e => setMedicoCabecera(e.target.value)} placeholder="Ej: Dr. Ramírez — Pediatría" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
+              <PasoOpciones titulo="¿Cuenta con seguro médico privado?" descripcion="" opciones={["Sí", "No"]} valor={seguroMedico} onChange={setSeguroMedico} />
+              {seguroMedico === "Sí" && (
+                <div>
+                  <label className="text-slate-500 text-xs mb-1 block">Nombre de la aseguradora</label>
+                  <input type="text" value={aseguradora} onChange={e => setAseguradora(e.target.value)} placeholder="Ej: GNP, AXA, Metlife" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                </div>
+              )}
             </div>
           )}
 
-          {/* Botones */}
           <div className="mt-8 flex flex-col gap-2">
-            <button onClick={() => guardarPaso(false)} disabled={guardando}
-              className="w-full bg-[#1A6BFF] hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
+            <button onClick={() => guardarPaso(false)} disabled={guardando} className="w-full bg-[#1A6BFF] hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors">
               {guardando ? "Guardando..." : "Continuar →"}
             </button>
-            <button onClick={() => guardarPaso(true)} disabled={guardando}
-              className="w-full text-slate-400 hover:text-slate-600 text-sm py-2 transition-colors">
+            <button onClick={() => guardarPaso(true)} disabled={guardando} className="w-full text-slate-400 hover:text-slate-600 text-sm py-2 transition-colors">
               Contestar más tarde
             </button>
             {indice > 1 && (
-              <button onClick={regresar}
-                className="w-full text-slate-400 hover:text-slate-600 text-sm py-2 transition-colors">
+              <button onClick={regresar} className="w-full text-slate-400 hover:text-slate-600 text-sm py-2 transition-colors">
                 ← Regresar
               </button>
             )}
@@ -593,8 +634,6 @@ export default function ScoutingPage() {
   );
 }
 
-// ── COMPONENTES AUXILIARES ─────────────────────────────
-
 function PasoTags({ titulo, descripcion, ayuda, placeholder, tags, tagInput, onInputChange, onAgregar, onQuitar }: any) {
   return (
     <div className="flex flex-col gap-4">
@@ -603,13 +642,8 @@ function PasoTags({ titulo, descripcion, ayuda, placeholder, tags, tagInput, onI
         <p className="text-slate-500 text-sm">{descripcion}</p>
       </div>
       <div className="flex gap-2">
-        <input type="text" value={tagInput} onChange={e => onInputChange(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && onAgregar()}
-          placeholder={placeholder}
-          className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
-        <button onClick={onAgregar} className="bg-[#1A6BFF] text-white px-4 py-3 rounded-xl text-sm font-medium hover:bg-blue-700">
-          Agregar
-        </button>
+        <input type="text" value={tagInput} onChange={e => onInputChange(e.target.value)} onKeyDown={(e: React.KeyboardEvent) => e.key === "Enter" && onAgregar()} placeholder={placeholder} className="flex-1 border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+        <button onClick={onAgregar} className="bg-[#1A6BFF] text-white px-4 py-3 rounded-xl text-sm font-medium hover:bg-blue-700">Agregar</button>
       </div>
       {tags.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -629,12 +663,11 @@ function PasoTags({ titulo, descripcion, ayuda, placeholder, tags, tagInput, onI
 function PasoOpciones({ titulo, descripcion, opciones, valor, onChange }: any) {
   return (
     <div>
-      <h2 className="text-slate-800 text-xl font-semibold mb-1">{titulo}</h2>
-      <p className="text-slate-500 text-sm mb-4">{descripcion}</p>
+      {titulo && <h2 className="text-slate-800 text-base font-semibold mb-1">{titulo}</h2>}
+      {descripcion && <p className="text-slate-500 text-sm mb-3">{descripcion}</p>}
       <div className="flex flex-col gap-2">
         {opciones.map((op: string) => (
-          <button key={op} onClick={() => onChange(op)}
-            className={`w-full text-left px-4 py-3 rounded-xl border text-sm font-medium transition-colors ${valor === op ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+          <button key={op} onClick={() => onChange(op)} className={`w-full text-left px-4 py-3 rounded-xl border text-sm font-medium transition-colors ${valor === op ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
             {op}
           </button>
         ))}
