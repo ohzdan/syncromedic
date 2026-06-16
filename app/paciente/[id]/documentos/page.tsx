@@ -55,8 +55,8 @@ export default function DocumentosPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push("/"); return; }
 
-    const { data: userData } = await supabase.from("users").select("rol").eq("id", user.id).single();
-    setRol(userData?.rol || "");
+    const { data: userData } = await supabase.from("users").select("role").eq("id", user.id).single();
+    setRol(userData?.role || "");
 
     const { data: pac } = await supabase.from("pacientes").select("id, nombre").eq("id", pacienteId).single();
     setPaciente(pac);
