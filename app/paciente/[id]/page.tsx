@@ -99,11 +99,11 @@ export default function ExpedientePaciente() {
             <p className="text-[#1A6BFF] text-xs font-semibold mt-3">+ Invitar médico →</p>
           </Link>
 
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer">
+          <Link href={`/paciente/${params.id}/notas`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
             <p className="text-2xl mb-3">📋</p>
             <h2 className="text-slate-900 font-semibold mb-1">Notas clínicas</h2>
             <p className="text-slate-500 text-sm">Consultas, sesiones y reportes del equipo</p>
-          </div>
+          </Link>
 
           <Link href={`/paciente/${params.id}/medicamentos`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
             <p className="text-2xl mb-3">💊</p>
