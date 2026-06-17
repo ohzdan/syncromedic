@@ -19,7 +19,7 @@ const FRECUENCIAS = [
 
 type Medicamento = {
   id: string;
-  nombre: string;
+  nombre_medicamento: string;
   dosis: string;
   frecuencia: string;
   indicado_por: string;
@@ -41,18 +41,17 @@ export default function MedicamentosPage() {
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
-  const [rol, setRol] = useState("");
   const [equipo, setEquipo] = useState<any[]>([]);
 
   const [modalAbierto, setModalAbierto] = useState(false);
   const [verHistorial, setVerHistorial] = useState(false);
 
-  // Campos del formulario
   const [nombre, setNombre] = useState("");
   const [dosis, setDosis] = useState("");
   const [frecuencia, setFrecuencia] = useState("");
   const [frecuenciaOtra, setFrecuenciaOtra] = useState("");
   const [indicadoPor, setIndicadoPor] = useState("");
+  const [indicadoPorOtro, setIndicadoPorOtro] = useState("");
   const [fechaInicio, setFechaInicio] = useState("");
   const [tieneFechaFin, setTieneFechaFin] = useState(false);
   const [fechaFin, setFechaFin] = useState("");
@@ -64,13 +63,9 @@ export default function MedicamentosPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push("/"); return; }
 
-    const { data: userData } = await supabase.from("users").select("role").eq("id", user.id).single();
-    setRol(userData?.role || "");
-
     const { data: pac } = await supabase.from("pacientes").select("id, nombre").eq("id", pacienteId).single();
     setPaciente(pac);
 
-    // Cargar equipo médico para el selector "indicado por"
     const { data: accesos } = await supabase
       .from("expediente_accesos")
       .select("usuario_id")
@@ -101,12 +96,13 @@ export default function MedicamentosPage() {
 
   function limpiarFormulario() {
     setNombre(""); setDosis(""); setFrecuencia(""); setFrecuenciaOtra("");
-    setIndicadoPor(""); setFechaInicio(""); setTieneFechaFin(false);
-    setFechaFin(""); setNotas(""); setError("");
+    setIndicadoPor(""); setIndicadoPorOtro(""); setFechaInicio("");
+    setTieneFechaFin(false); setFechaFin(""); setNotas(""); setError("");
   }
 
   async function guardarMedicamento() {
-    if (!nombre || !dosis || !frecuencia || !indicadoPor || !fechaInicio) {
+    const indicadoFinal = indicadoPor === "Otro" ? indicadoPorOtro : indicadoPor;
+    if (!nombre || !dosis || !frecuencia || !indicadoFinal || !fechaInicio) {
       setError("Completa los campos obligatorios.");
       return;
     }
@@ -117,10 +113,10 @@ export default function MedicamentosPage() {
 
     const { error: dbError } = await supabase.from("medicamentos_activos").insert({
       paciente_id: pacienteId,
-      nombre,
+      nombre_medicamento: nombre,
       dosis,
       frecuencia: frecuenciaFinal,
-      indicado_por: indicadoPor,
+      indicado_por: indicadoFinal,
       fecha_inicio: fechaInicio,
       fecha_fin: tieneFechaFin && fechaFin ? fechaFin : null,
       notas: notas || null,
@@ -184,7 +180,6 @@ export default function MedicamentosPage() {
           </button>
         </div>
 
-        {/* Medicamentos activos */}
         <h2 className="text-slate-600 text-xs font-semibold uppercase tracking-wide mb-3">Activos</h2>
         {activos.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center shadow-sm mb-6">
@@ -201,7 +196,7 @@ export default function MedicamentosPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-slate-800 font-semibold">{med.nombre}</h3>
+                      <h3 className="text-slate-800 font-semibold">{med.nombre_medicamento}</h3>
                       <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded-full">Activo</span>
                     </div>
                     <p className="text-slate-600 text-sm">{med.dosis} · {med.frecuencia}</p>
@@ -210,7 +205,7 @@ export default function MedicamentosPage() {
                     {med.notas && <p className="text-slate-500 text-xs mt-2 italic">"{med.notas}"</p>}
                   </div>
                   <button
-                    onClick={() => desactivarMedicamento(med.id, med.nombre)}
+                    onClick={() => desactivarMedicamento(med.id, med.nombre_medicamento)}
                     className="text-slate-400 hover:text-red-500 text-xs px-3 py-1.5 border border-slate-200 hover:border-red-200 rounded-lg transition-colors flex-shrink-0"
                   >
                     Suspender
@@ -221,7 +216,6 @@ export default function MedicamentosPage() {
           </div>
         )}
 
-        {/* Historial */}
         {historial.length > 0 && (
           <div>
             <button
@@ -237,7 +231,7 @@ export default function MedicamentosPage() {
                     <div className="flex items-start gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h3 className="text-slate-600 font-semibold">{med.nombre}</h3>
+                          <h3 className="text-slate-600 font-semibold">{med.nombre_medicamento}</h3>
                           <span className="text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">Suspendido</span>
                         </div>
                         <p className="text-slate-500 text-sm">{med.dosis} · {med.frecuencia}</p>
@@ -254,7 +248,6 @@ export default function MedicamentosPage() {
         )}
       </div>
 
-      {/* Modal agregar medicamento */}
       {modalAbierto && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
@@ -263,58 +256,40 @@ export default function MedicamentosPage() {
 
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Nombre del medicamento *</label>
-                <input
-                  type="text"
-                  value={nombre}
-                  onChange={e => setNombre(e.target.value)}
+                <input type="text" value={nombre} onChange={e => setNombre(e.target.value)}
                   placeholder="Ej: Risperidona"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                />
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
 
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Dosis *</label>
-                <input
-                  type="text"
-                  value={dosis}
-                  onChange={e => setDosis(e.target.value)}
+                <input type="text" value={dosis} onChange={e => setDosis(e.target.value)}
                   placeholder="Ej: 0.5 mg"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                />
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
 
               <div>
                 <label className="text-slate-500 text-xs mb-2 block">Frecuencia *</label>
                 <div className="flex flex-col gap-2">
                   {FRECUENCIAS.map(f => (
-                    <button
-                      key={f}
-                      onClick={() => setFrecuencia(f)}
-                      className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm font-medium transition-colors ${frecuencia === f ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
-                    >
+                    <button key={f} onClick={() => setFrecuencia(f)}
+                      className={`w-full text-left px-4 py-2.5 rounded-xl border text-sm font-medium transition-colors ${frecuencia === f ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
                       {f}
                     </button>
                   ))}
                 </div>
                 {frecuencia === "Otra" && (
-                  <input
-                    type="text"
-                    value={frecuenciaOtra}
-                    onChange={e => setFrecuenciaOtra(e.target.value)}
+                  <input type="text" value={frecuenciaOtra} onChange={e => setFrecuenciaOtra(e.target.value)}
                     placeholder="Especifica la frecuencia"
-                    className="mt-2 w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                  />
+                    className="mt-2 w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                 )}
               </div>
 
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Indicado por *</label>
                 {equipo.length > 0 ? (
-                  <select
-                    value={indicadoPor}
-                    onChange={e => setIndicadoPor(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                  >
+                  <select value={indicadoPor} onChange={e => setIndicadoPor(e.target.value)}
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]">
                     <option value="">Seleccionar médico</option>
                     {equipo.map(m => (
                       <option key={m.id} value={m.full_name || m.id}>
@@ -324,79 +299,51 @@ export default function MedicamentosPage() {
                     <option value="Otro">Otro médico (externo)</option>
                   </select>
                 ) : (
-                  <input
-                    type="text"
-                    value={indicadoPor}
-                    onChange={e => setIndicadoPor(e.target.value)}
+                  <input type="text" value={indicadoPor} onChange={e => setIndicadoPor(e.target.value)}
                     placeholder="Ej: Dr. Ramírez — Neurología"
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                  />
+                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                 )}
                 {indicadoPor === "Otro" && (
-                  <input
-                    type="text"
-                    onChange={e => setIndicadoPor(e.target.value)}
+                  <input type="text" value={indicadoPorOtro} onChange={e => setIndicadoPorOtro(e.target.value)}
                     placeholder="Nombre del médico externo"
-                    className="mt-2 w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                  />
+                    className="mt-2 w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                 )}
               </div>
 
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Fecha de inicio *</label>
-                <input
-                  type="date"
-                  value={fechaInicio}
-                  onChange={e => setFechaInicio(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                />
+                <input type="date" value={fechaInicio} onChange={e => setFechaInicio(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
 
               <div>
                 <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={tieneFechaFin}
-                    onChange={e => setTieneFechaFin(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-slate-500 text-xs">Este medicamento tiene fecha de fin (tratamiento temporal)</span>
+                  <input type="checkbox" checked={tieneFechaFin} onChange={e => setTieneFechaFin(e.target.checked)} className="rounded" />
+                  <span className="text-slate-500 text-xs">Tratamiento temporal (tiene fecha de fin)</span>
                 </label>
                 {tieneFechaFin && (
-                  <input
-                    type="date"
-                    value={fechaFin}
-                    onChange={e => setFechaFin(e.target.value)}
-                    className="mt-2 w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                  />
+                  <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)}
+                    className="mt-2 w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                 )}
               </div>
 
               <div>
                 <label className="text-slate-500 text-xs mb-1 block">Notas adicionales</label>
-                <textarea
-                  value={notas}
-                  onChange={e => setNotas(e.target.value)}
+                <textarea value={notas} onChange={e => setNotas(e.target.value)}
                   placeholder="Ej: Tomar con alimentos. Evitar exposición al sol."
                   rows={3}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
-                />
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
               </div>
 
               {error && <p className="text-red-500 text-sm">{error}</p>}
 
               <div className="flex gap-3 mt-2">
-                <button
-                  onClick={() => { setModalAbierto(false); limpiarFormulario(); }}
-                  className="flex-1 border border-slate-200 text-slate-600 text-sm font-medium py-3 rounded-xl hover:bg-slate-50 transition-colors"
-                >
+                <button onClick={() => { setModalAbierto(false); limpiarFormulario(); }}
+                  className="flex-1 border border-slate-200 text-slate-600 text-sm font-medium py-3 rounded-xl hover:bg-slate-50 transition-colors">
                   Cancelar
                 </button>
-                <button
-                  onClick={guardarMedicamento}
-                  disabled={guardando}
-                  className="flex-1 bg-[#1A6BFF] hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold py-3 rounded-xl transition-colors"
-                >
+                <button onClick={guardarMedicamento} disabled={guardando}
+                  className="flex-1 bg-[#1A6BFF] hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold py-3 rounded-xl transition-colors">
                   {guardando ? "Guardando..." : "Guardar"}
                 </button>
               </div>
