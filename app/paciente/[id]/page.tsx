@@ -96,7 +96,7 @@ export default function ExpedientePaciente() {
             <p className="text-2xl mb-3">🩺</p>
             <h2 className="text-slate-900 font-semibold mb-1">Equipo médico</h2>
             <p className="text-slate-500 text-sm">Doctores, terapeutas y escuela vinculados</p>
-            <p className="text-[#1A6BFF] text-xs font-semibold mt-3">+ Invitar médico →</p>
+            <p className="text-[#1A6BFF] text-xs font-semibold mt-3">+ Invitar profesional →</p>
           </Link>
 
           <Link href={`/paciente/${params.id}/notas`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
@@ -115,6 +115,12 @@ export default function ExpedientePaciente() {
             <p className="text-2xl mb-3">📁</p>
             <h2 className="text-slate-900 font-semibold mb-1">Documentos</h2>
             <p className="text-slate-500 text-sm">Estudios, análisis y recetas</p>
+          </Link>
+
+          <Link href={`/paciente/${params.id}/recomendaciones`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline sm:col-span-2">
+            <p className="text-2xl mb-3">📝</p>
+            <h2 className="text-slate-900 font-semibold mb-1">Recomendaciones para la escuela</h2>
+            <p className="text-slate-500 text-sm">Indicaciones del equipo médico y terapéutico para el entorno escolar</p>
           </Link>
 
         </div>
