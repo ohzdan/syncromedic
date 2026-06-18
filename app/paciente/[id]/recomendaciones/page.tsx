@@ -62,8 +62,8 @@ export default function RecomendacionesPage() {
     if (data) {
       const conNombres = await Promise.all(data.map(async (rec) => {
         const { data: autor } = await supabase
-          .from('users').select('nombre').eq('id', rec.autor_id).single()
-        return { ...rec, autor_nombre: autor?.nombre ?? 'Desconocido' }
+          .from('users').select('full_name').eq('id', rec.autor_id).single()
+        return { ...rec, autor_nombre: autor?.full_name ?? 'Desconocido' }
       }))
       setRecomendaciones(conNombres)
     }
