@@ -117,7 +117,13 @@ export default function ExpedientePaciente() {
             <p className="text-slate-500 text-sm">Estudios, análisis y recetas</p>
           </Link>
 
-          <Link href={`/paciente/${params.id}/recomendaciones`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline sm:col-span-2">
+          <Link href={`/paciente/${params.id}/timeline`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+            <p className="text-2xl mb-3">⏱️</p>
+            <h2 className="text-slate-900 font-semibold mb-1">Timeline médico</h2>
+            <p className="text-slate-500 text-sm">Historial cronológico de todos los eventos del expediente</p>
+          </Link>
+
+          <Link href={`/paciente/${params.id}/recomendaciones`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
             <p className="text-2xl mb-3">📝</p>
             <h2 className="text-slate-900 font-semibold mb-1">Recomendaciones para la escuela</h2>
             <p className="text-slate-500 text-sm">Indicaciones del equipo médico y terapéutico para el entorno escolar</p>
