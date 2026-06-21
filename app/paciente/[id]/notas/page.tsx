@@ -6,23 +6,29 @@ import Link from "next/link";
 
 const TIPOS_NOTA = [
   { id: "consulta", label: "Consulta", emoji: "🩺" },
-  { id: "terapia", label: "Sesión de terapia", emoji: "🧠" },
+  { id: "sesion_terapia", label: "Sesión de terapia", emoji: "🧠" },
   { id: "urgencia", label: "Urgencia", emoji: "🚨" },
   { id: "seguimiento", label: "Seguimiento", emoji: "📊" },
-  { id: "otro", label: "Otro", emoji: "📝" },
+  { id: "interconsulta", label: "Interconsulta", emoji: "🔄" },
 ];
 
 type Nota = {
   id: string;
-  tipo: string;
-  contenido: string;
-  imagen_url: string | null;
+  tipo_nota: string;
+  motivo: string | null;
+  subjetivo: string | null;
+  objetivo: string | null;
+  diagnostico_cie10: string[] | null;
+  plan: string | null;
+  indicaciones: string | null;
+  proxima_cita: string | null;
   imagen_path: string | null;
   fecha_consulta: string;
   created_at: string;
   autor_id: string;
   autor_nombre: string;
   especialidad: string | null;
+  firmada: boolean;
 };
 
 export default function NotasPage() {
@@ -42,17 +48,22 @@ export default function NotasPage() {
   const [modalAbierto, setModalAbierto] = useState(false);
   const [filtroTipo, setFiltroTipo] = useState("todos");
 
-  // Campos formulario
+  // Formulario SOAP
   const [tipo, setTipo] = useState("");
-  const [contenido, setContenido] = useState("");
   const [fechaConsulta, setFechaConsulta] = useState(new Date().toISOString().split("T")[0]);
+  const [motivo, setMotivo] = useState("");
+  const [subjetivo, setSubjetivo] = useState("");
+  const [objetivo, setObjetivo] = useState("");
+  const [plan, setPlan] = useState("");
+  const [indicaciones, setIndicaciones] = useState("");
+  const [proximaCita, setProximaCita] = useState("");
   const [imagen, setImagen] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [modoImagen, setModoImagen] = useState(false);
 
   // Visor
   const [notaVisor, setNotaVisor] = useState<Nota | null>(null);
   const [urlVisor, setUrlVisor] = useState<string | null>(null);
+  const [notaExpandida, setNotaExpandida] = useState<string | null>(null);
 
   useEffect(() => { cargarDatos(); }, []);
 
@@ -83,8 +94,16 @@ export default function NotasPage() {
       .from("notas_clinicas")
       .select("*")
       .eq("paciente_id", pacienteId)
+      .is("deleted_at", null)
       .order("fecha_consulta", { ascending: false });
     setNotas(data || []);
+  }
+
+  function limpiarFormulario() {
+    setTipo(""); setMotivo(""); setSubjetivo(""); setObjetivo("");
+    setPlan(""); setIndicaciones(""); setProximaCita("");
+    setImagen(null); setPreview(null); setError("");
+    setFechaConsulta(new Date().toISOString().split("T")[0]);
   }
 
   function onImagenSeleccionada(e: React.ChangeEvent<HTMLInputElement>) {
@@ -94,26 +113,19 @@ export default function NotasPage() {
     setPreview(URL.createObjectURL(file));
   }
 
-  function limpiarFormulario() {
-    setTipo(""); setContenido(""); setImagen(null); setPreview(null);
-    setModoImagen(false); setError("");
-    setFechaConsulta(new Date().toISOString().split("T")[0]);
-  }
-
   async function guardarNota() {
     if (!tipo || !fechaConsulta) {
       setError("Selecciona el tipo de nota y la fecha.");
       return;
     }
-    if (!contenido && !imagen) {
-      setError("Agrega texto o una imagen.");
+    if (!motivo && !subjetivo && !plan) {
+      setError("Completa al menos el motivo, subjetivo o plan.");
       return;
     }
     setGuardando(true);
     setError("");
 
     let imagenPath = null;
-
     if (imagen) {
       const ext = imagen.name.split(".").pop();
       const path = `notas/${pacienteId}/${Date.now()}.${ext}`;
@@ -129,15 +141,20 @@ export default function NotasPage() {
     }
 
     const { error: dbError } = await supabase.from("notas_clinicas").insert({
-      paciente_id: pacienteId,
-      tipo,
-      contenido: contenido || null,
-      imagen_path: imagenPath,
-      imagen_url: imagenPath,
+      paciente_id:    pacienteId,
+      tipo_nota:      tipo,
       fecha_consulta: fechaConsulta,
-      autor_id: usuario.id,
-      autor_nombre: usuario.full_name || "Usuario",
-      especialidad: usuario.especialidad || null,
+      motivo:         motivo || null,
+      subjetivo:      subjetivo || null,
+      objetivo:       objetivo || null,
+      plan:           plan || null,
+      indicaciones:   indicaciones || null,
+      proxima_cita:   proximaCita || null,
+      imagen_path:    imagenPath,
+      autor_id:       usuario.id,
+      autor_nombre:   usuario.full_name || "Usuario",
+      especialidad:   usuario.especialidad || null,
+      firmada:        false,
     });
 
     if (dbError) {
@@ -171,7 +188,7 @@ export default function NotasPage() {
 
   const notasFiltradas = filtroTipo === "todos"
     ? notas
-    : notas.filter(n => n.tipo === filtroTipo);
+    : notas.filter(n => n.tipo_nota === filtroTipo);
 
   if (loading) return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -245,36 +262,83 @@ export default function NotasPage() {
         ) : (
           <div className="flex flex-col gap-4">
             {notasFiltradas.map(nota => {
-              const tipoInfo = TIPOS_NOTA.find(t => t.id === nota.tipo);
+              const tipoInfo = TIPOS_NOTA.find(t => t.id === nota.tipo_nota);
+              const expandida = notaExpandida === nota.id;
               return (
-                <div key={nota.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-                  <div className="flex items-start justify-between gap-4 mb-3">
+                <div key={nota.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                  {/* Header de la nota */}
+                  <div
+                    className="flex items-start justify-between gap-4 p-5 cursor-pointer hover:bg-slate-50 transition-colors"
+                    onClick={() => setNotaExpandida(expandida ? null : nota.id)}
+                  >
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{tipoInfo?.emoji || "📝"}</span>
                       <div>
-                        <p className="text-slate-800 text-sm font-semibold">{tipoInfo?.label || nota.tipo}</p>
+                        <p className="text-slate-800 text-sm font-semibold">{tipoInfo?.label || nota.tipo_nota}</p>
                         <p className="text-slate-400 text-xs">{formatFecha(nota.fecha_consulta)}</p>
                       </div>
                     </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-slate-600 text-xs font-medium">{nota.autor_nombre}</p>
-                      {nota.especialidad && <p className="text-slate-400 text-xs">{nota.especialidad}</p>}
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-slate-600 text-xs font-medium">{nota.autor_nombre}</p>
+                        {nota.especialidad && <p className="text-slate-400 text-xs">{nota.especialidad}</p>}
+                      </div>
+                      <span className="text-slate-300 text-sm">{expandida ? '▲' : '▼'}</span>
                     </div>
                   </div>
 
-                  {nota.contenido && (
-                    <div className="bg-slate-50 rounded-xl p-4 text-slate-700 text-sm whitespace-pre-wrap border border-slate-100">
-                      {nota.contenido}
+                  {/* Contenido SOAP expandido */}
+                  {expandida && (
+                    <div className="px-5 pb-5 border-t border-slate-100">
+                      <div className="mt-4 flex flex-col gap-3">
+                        {nota.motivo && (
+                          <div>
+                            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Motivo</p>
+                            <p className="text-slate-700 text-sm">{nota.motivo}</p>
+                          </div>
+                        )}
+                        {nota.subjetivo && (
+                          <div>
+                            <p className="text-xs font-semibold text-[#1A6BFF] uppercase tracking-wide mb-1">S — Subjetivo</p>
+                            <p className="text-slate-700 text-sm whitespace-pre-wrap">{nota.subjetivo}</p>
+                          </div>
+                        )}
+                        {nota.objetivo && (
+                          <div>
+                            <p className="text-xs font-semibold text-[#00C97A] uppercase tracking-wide mb-1">O — Objetivo</p>
+                            <p className="text-slate-700 text-sm whitespace-pre-wrap">{nota.objetivo}</p>
+                          </div>
+                        )}
+                        {nota.plan && (
+                          <div>
+                            <p className="text-xs font-semibold text-purple-500 uppercase tracking-wide mb-1">P — Plan</p>
+                            <p className="text-slate-700 text-sm whitespace-pre-wrap">{nota.plan}</p>
+                          </div>
+                        )}
+                        {nota.indicaciones && (
+                          <div>
+                            <p className="text-xs font-semibold text-amber-500 uppercase tracking-wide mb-1">Indicaciones</p>
+                            <p className="text-slate-700 text-sm whitespace-pre-wrap">{nota.indicaciones}</p>
+                          </div>
+                        )}
+                        {nota.proxima_cita && (
+                          <div className="bg-blue-50 rounded-xl px-4 py-2 inline-block">
+                            <p className="text-xs text-[#1A6BFF] font-medium">📅 Próxima cita: {formatFecha(nota.proxima_cita)}</p>
+                          </div>
+                        )}
+                        {nota.imagen_path && (
+                          <button
+                            onClick={() => abrirImagen(nota)}
+                            className="flex items-center gap-2 text-[#1A6BFF] text-xs font-medium hover:underline"
+                          >
+                            🖼️ Ver imagen adjunta →
+                          </button>
+                        )}
+                        {nota.firmada && (
+                          <p className="text-xs text-green-600 font-medium">✅ Nota firmada</p>
+                        )}
+                      </div>
                     </div>
-                  )}
-
-                  {nota.imagen_path && (
-                    <button
-                      onClick={() => abrirImagen(nota)}
-                      className="mt-3 flex items-center gap-2 text-[#1A6BFF] text-xs font-medium hover:underline"
-                    >
-                      🖼️ Ver imagen adjunta →
-                    </button>
                   )}
                 </div>
               );
@@ -283,15 +347,16 @@ export default function NotasPage() {
         )}
       </div>
 
-      {/* Modal nueva nota */}
+      {/* Modal nueva nota SOAP */}
       {modalAbierto && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-slate-800 text-lg font-bold mb-5">Nueva nota clínica</h2>
             <div className="flex flex-col gap-4">
 
+              {/* Tipo */}
               <div>
-                <label className="text-slate-500 text-xs mb-2 block">Tipo de nota *</label>
+                <label className="text-slate-500 text-xs mb-2 block font-medium">Tipo de nota *</label>
                 <div className="grid grid-cols-2 gap-2">
                   {TIPOS_NOTA.map(t => (
                     <button
@@ -305,8 +370,9 @@ export default function NotasPage() {
                 </div>
               </div>
 
+              {/* Fecha */}
               <div>
-                <label className="text-slate-500 text-xs mb-1 block">Fecha de la consulta *</label>
+                <label className="text-slate-500 text-xs mb-1 block font-medium">Fecha de la consulta *</label>
                 <input
                   type="date"
                   value={fechaConsulta}
@@ -315,59 +381,101 @@ export default function NotasPage() {
                 />
               </div>
 
-              {/* Toggle texto / imagen */}
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setModoImagen(false)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${!modoImagen ? "bg-[#1A6BFF] border-[#1A6BFF] text-white" : "border-slate-200 text-slate-600"}`}
-                >
-                  ✏️ Texto
-                </button>
-                <button
-                  onClick={() => setModoImagen(true)}
-                  className={`flex-1 py-2 rounded-xl text-sm font-medium border transition-colors ${modoImagen ? "bg-[#1A6BFF] border-[#1A6BFF] text-white" : "border-slate-200 text-slate-600"}`}
-                >
-                  🖼️ Imagen
-                </button>
+              {/* Motivo */}
+              <div>
+                <label className="text-slate-500 text-xs mb-1 block font-medium">Motivo de consulta</label>
+                <input
+                  type="text"
+                  value={motivo}
+                  onChange={e => setMotivo(e.target.value)}
+                  placeholder="¿Por qué viene el paciente hoy?"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
+                />
               </div>
 
-              {!modoImagen ? (
-                <div>
-                  <label className="text-slate-500 text-xs mb-1 block">Contenido de la nota</label>
-                  <textarea
-                    value={contenido}
-                    onChange={e => setContenido(e.target.value)}
-                    placeholder="Escribe o pega aquí las notas de la consulta..."
-                    rows={6}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
-                  />
+              {/* S - Subjetivo */}
+              <div>
+                <label className="text-xs mb-1 block font-semibold text-[#1A6BFF]">S — Subjetivo</label>
+                <p className="text-xs text-slate-400 mb-1">Lo que reporta el paciente o la familia</p>
+                <textarea
+                  value={subjetivo}
+                  onChange={e => setSubjetivo(e.target.value)}
+                  placeholder="La mamá refiere que..."
+                  rows={3}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
+                />
+              </div>
+
+              {/* O - Objetivo */}
+              <div>
+                <label className="text-xs mb-1 block font-semibold text-[#00C97A]">O — Objetivo</label>
+                <p className="text-xs text-slate-400 mb-1">Lo que el especialista observa o mide</p>
+                <textarea
+                  value={objetivo}
+                  onChange={e => setObjetivo(e.target.value)}
+                  placeholder="Paciente alerta, peso 18kg..."
+                  rows={3}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
+                />
+              </div>
+
+              {/* P - Plan */}
+              <div>
+                <label className="text-xs mb-1 block font-semibold text-purple-500">P — Plan</label>
+                <p className="text-xs text-slate-400 mb-1">Diagnóstico y decisiones clínicas</p>
+                <textarea
+                  value={plan}
+                  onChange={e => setPlan(e.target.value)}
+                  placeholder="Continuar tratamiento, ajuste de dosis..."
+                  rows={3}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
+                />
+              </div>
+
+              {/* Indicaciones */}
+              <div>
+                <label className="text-xs mb-1 block font-semibold text-amber-500">Indicaciones para la familia</label>
+                <textarea
+                  value={indicaciones}
+                  onChange={e => setIndicaciones(e.target.value)}
+                  placeholder="Administrar medicamento con alimentos..."
+                  rows={2}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
+                />
+              </div>
+
+              {/* Próxima cita */}
+              <div>
+                <label className="text-slate-500 text-xs mb-1 block font-medium">Próxima cita (opcional)</label>
+                <input
+                  type="date"
+                  value={proximaCita}
+                  onChange={e => setProximaCita(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
+                />
+              </div>
+
+              {/* Imagen opcional */}
+              <div>
+                <label className="text-slate-500 text-xs mb-1 block font-medium">Imagen adjunta (opcional)</label>
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#1A6BFF] transition-colors"
+                >
+                  {preview ? (
+                    <img src={preview} alt="preview" className="max-h-32 mx-auto rounded-lg object-contain" />
+                  ) : (
+                    <p className="text-slate-400 text-sm">📷 Toca para adjuntar imagen</p>
+                  )}
                 </div>
-              ) : (
-                <div>
-                  <label className="text-slate-500 text-xs mb-1 block">Imagen de la nota</label>
-                  <div
-                    onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center cursor-pointer hover:border-[#1A6BFF] transition-colors"
-                  >
-                    {preview ? (
-                      <img src={preview} alt="preview" className="max-h-40 mx-auto rounded-lg object-contain" />
-                    ) : (
-                      <div>
-                        <div className="text-3xl mb-2">📷</div>
-                        <p className="text-slate-500 text-sm">Toca para seleccionar</p>
-                        <p className="text-slate-400 text-xs mt-1">JPG o PNG · máx 10 MB</p>
-                      </div>
-                    )}
-                  </div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.webp"
-                    onChange={onImagenSeleccionada}
-                    className="hidden"
-                  />
-                </div>
-              )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp"
+                  onChange={onImagenSeleccionada}
+                  className="hidden"
+                />
+              </div>
 
               {error && <p className="text-red-500 text-sm">{error}</p>}
 
@@ -398,7 +506,7 @@ export default function NotasPage() {
             <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
               <div>
                 <p className="text-slate-800 text-sm font-semibold">
-                  {TIPOS_NOTA.find(t => t.id === notaVisor.tipo)?.label} — {formatFecha(notaVisor.fecha_consulta)}
+                  {TIPOS_NOTA.find(t => t.id === notaVisor.tipo_nota)?.label} — {formatFecha(notaVisor.fecha_consulta)}
                 </p>
                 <p className="text-slate-400 text-xs">{notaVisor.autor_nombre}</p>
               </div>
