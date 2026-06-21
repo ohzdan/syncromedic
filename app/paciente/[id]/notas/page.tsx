@@ -141,7 +141,7 @@ export default function NotasPage() {
     });
 
     if (dbError) {
-      setError("Error al guardar la nota.");
+      setError(dbError.message);
       setGuardando(false);
       return;
     }
