@@ -4,6 +4,20 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
+const LABELS_ROL: Record<string, string> = {
+  medico:          'Médico',
+  terapeuta:       'Terapeuta',
+  centro_terapias: 'Centro de terapias',
+  escuela:         'Escuela',
+}
+
+const ICONOS_ROL: Record<string, string> = {
+  medico:          '🩺',
+  terapeuta:       '🧠',
+  centro_terapias: '🏥',
+  escuela:         '🏫',
+}
+
 export default function AceptarInvitacion() {
   const params = useParams()
   const router = useRouter()
@@ -62,15 +76,17 @@ export default function AceptarInvitacion() {
     setLoading(true)
     setError('')
 
+    const rol = invitacion?.rol ?? 'medico'
+
     const { error: regError } = await supabase.auth.signUp({
       email: form.email,
       password: form.password,
       options: {
         data: {
-          nombre: invitacion.nombre_medico,
-          rol: 'especialista',
+          full_name:   invitacion.nombre_medico,
+          role:        rol,
           especialidad: invitacion.especialidad,
-          cedula: form.cedula,
+          cedula:      form.cedula,
         }
       }
     })
@@ -84,15 +100,24 @@ export default function AceptarInvitacion() {
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setError('Error al obtener sesión'); setLoading(false); return }
 
+    // Actualizar el rol del usuario según la invitación
+    const rol = invitacion?.rol ?? 'medico'
+    await supabase
+      .from('users')
+      .update({ role: rol })
+      .eq('id', user.id)
+
+    // Crear acceso al expediente
     await supabase.from('expediente_accesos').insert({
-      paciente_id: invitacion.paciente_id,
-      usuario_id: user.id,
-      invitado_por: invitacion.invitado_por,
-      estado: 'activo',
+      paciente_id:          invitacion.paciente_id,
+      usuario_id:           user.id,
+      invitado_por:         invitacion.invitado_por,
+      estado:               'activo',
       consentimiento_firmado: true,
       consentimiento_fecha: new Date().toISOString(),
     })
 
+    // Marcar invitación como aceptada
     await supabase.from('invitaciones')
       .update({ estado: 'aceptada' })
       .eq('token', token)
@@ -129,25 +154,53 @@ export default function AceptarInvitacion() {
     </div>
   )
 
+  const rolLabel = LABELS_ROL[invitacion?.rol] ?? invitacion?.especialidad
+  const rolIcono = ICONOS_ROL[invitacion?.rol] ?? '👤'
+
   return (
     <div style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
       <div style={{ background: 'white', borderRadius: '16px', padding: '40px', width: '100%', maxWidth: '480px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)' }}>
 
+        {/* Info del paciente */}
         <div style={{ background: '#f0f9ff', borderRadius: '12px', padding: '16px', marginBottom: '28px' }}>
-          <p style={{ fontSize: '13px', color: '#0369a1', fontWeight: '600', marginBottom: '4px' }}>Te invitaron al expediente de</p>
-          <p style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', marginBottom: '4px' }}>{paciente?.nombre}</p>
+          <p style={{ fontSize: '13px', color: '#0369a1', fontWeight: '600', marginBottom: '4px' }}>
+            Te invitaron al expediente de
+          </p>
+          <p style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', marginBottom: '4px' }}>
+            {paciente?.nombre}
+          </p>
           <p style={{ fontSize: '13px', color: '#64748b' }}>{paciente?.diagnostico_principal}</p>
-          <p style={{ fontSize: '13px', color: '#64748b', marginTop: '8px' }}>Tu rol: <strong>{invitacion?.especialidad}</strong></p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '10px' }}>
+            <span style={{ fontSize: '16px' }}>{rolIcono}</span>
+            <span style={{ fontSize: '13px', color: '#0369a1', fontWeight: '500' }}>
+              Tu rol: {rolLabel}
+            </span>
+          </div>
+          {invitacion?.rol === 'escuela' && (
+            <p style={{ fontSize: '12px', color: '#64748b', marginTop: '6px' }}>
+              ⚠️ Solo tendrás acceso a la sección de Recomendaciones.
+            </p>
+          )}
         </div>
 
         {modo === 'elegir' && (
           <>
-            <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', marginBottom: '8px' }}>Hola, {invitacion?.nombre_medico}</h2>
-            <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>¿Ya tienes cuenta en SyncroMedic?</p>
-            <button onClick={() => setModo('login')} style={{ width: '100%', padding: '12px', background: '#1A6BFF', color: 'white', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', marginBottom: '12px' }}>
+            <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', marginBottom: '8px' }}>
+              Hola, {invitacion?.nombre_medico}
+            </h2>
+            <p style={{ color: '#64748b', fontSize: '14px', marginBottom: '24px' }}>
+              ¿Ya tienes cuenta en SyncroMedic?
+            </p>
+            <button
+              onClick={() => setModo('login')}
+              style={{ width: '100%', padding: '12px', background: '#1A6BFF', color: 'white', border: 'none', borderRadius: '8px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', marginBottom: '12px' }}
+            >
               Sí, tengo cuenta
             </button>
-            <button onClick={() => setModo('registro')} style={{ width: '100%', padding: '12px', background: 'white', color: '#1A6BFF', border: '2px solid #1A6BFF', borderRadius: '8px', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}>
+            <button
+              onClick={() => setModo('registro')}
+              style={{ width: '100%', padding: '12px', background: 'white', color: '#1A6BFF', border: '2px solid #1A6BFF', borderRadius: '8px', fontSize: '15px', fontWeight: '600', cursor: 'pointer' }}
+            >
               No, crear cuenta nueva
             </button>
           </>
@@ -159,9 +212,11 @@ export default function AceptarInvitacion() {
               {modo === 'login' ? 'Inicia sesión' : 'Crea tu cuenta'}
             </h2>
 
-            {modo === 'registro' && (
+            {modo === 'registro' && invitacion?.rol === 'medico' && (
               <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Cédula profesional</label>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
+                  Cédula profesional
+                </label>
                 <input
                   type="text"
                   value={form.cedula}
@@ -172,7 +227,9 @@ export default function AceptarInvitacion() {
             )}
 
             <div style={{ marginBottom: '16px' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Correo electrónico</label>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
+                Correo electrónico
+              </label>
               <input
                 type="email"
                 value={form.email}
@@ -182,7 +239,9 @@ export default function AceptarInvitacion() {
             </div>
 
             <div style={{ marginBottom: '20px' }}>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Contraseña</label>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>
+                Contraseña
+              </label>
               <input
                 type="password"
                 value={form.password}
@@ -201,7 +260,10 @@ export default function AceptarInvitacion() {
               {loading ? 'Procesando...' : modo === 'login' ? 'Entrar y aceptar' : 'Crear cuenta y aceptar'}
             </button>
 
-            <button onClick={() => setModo('elegir')} style={{ width: '100%', padding: '10px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', cursor: 'pointer' }}>
+            <button
+              onClick={() => setModo('elegir')}
+              style={{ width: '100%', padding: '10px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px', cursor: 'pointer' }}
+            >
               Regresar
             </button>
           </>
