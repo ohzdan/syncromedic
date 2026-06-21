@@ -4,10 +4,28 @@ import { createClient } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
+type Rol = 'familia' | 'medico' | 'terapeuta' | 'centro_terapias' | 'escuela' | 'admin'
+
+const SALUDO_ROL: Record<string, string> = {
+  medico:          'Dr.',
+  terapeuta:       'Lic.',
+  centro_terapias: '',
+  escuela:         '',
+  familia:         '',
+}
+
+const DESCRIPCION_ROL: Record<string, string> = {
+  medico:          'paciente bajo tu cuidado',
+  terapeuta:       'paciente bajo tu cuidado',
+  centro_terapias: 'paciente vinculado',
+  escuela:         'paciente vinculado',
+  familia:         'expediente activo',
+}
+
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null);
   const [pacientes, setPacientes] = useState<any[]>([]);
-  const [rol, setRol] = useState<'familia' | 'especialista' | null>(null);
+  const [rol, setRol] = useState<Rol>('familia');
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const supabase = createClient();
@@ -18,10 +36,26 @@ export default function Dashboard() {
       if (!user) { router.push("/"); return; }
       setUser(user);
 
-      const rolDetectado = user.user_metadata?.rol || 'familia';
+      // Leer rol desde la tabla users (fuente de verdad)
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      const rolDetectado: Rol = userData?.role || user.user_metadata?.role || 'familia';
       setRol(rolDetectado);
 
-      if (rolDetectado === 'especialista') {
+      if (rolDetectado === 'familia') {
+        const { data } = await supabase
+          .from("pacientes")
+          .select("*")
+          .eq("familia_id", user.id)
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false });
+        setPacientes(data || []);
+      } else {
+        // Todos los roles no-familia ven sus pacientes por expediente_accesos
         const { data: accesos } = await supabase
           .from("expediente_accesos")
           .select("paciente_id")
@@ -39,15 +73,6 @@ export default function Dashboard() {
         } else {
           setPacientes([]);
         }
-      } else {
-        const { data } = await supabase
-          .from("pacientes")
-          .select("*")
-          .eq("familia_id", user.id)
-          .is("deleted_at", null)
-          .order("created_at", { ascending: false });
-
-        setPacientes(data || []);
       }
 
       setLoading(false);
@@ -71,7 +96,18 @@ export default function Dashboard() {
 
   if (!user) return null;
 
-  const esMedico = rol === 'especialista';
+  const esFamilia = rol === 'familia';
+  const nombreUsuario = user.user_metadata?.full_name || user.user_metadata?.nombre || user.email
+  const primerNombre = nombreUsuario?.split(" ")[0] || ''
+  const prefijo = SALUDO_ROL[rol] ?? ''
+  const descRol = DESCRIPCION_ROL[rol] ?? 'expediente activo'
+
+  const badgeRol: Record<string, string> = {
+    medico:          'Médico',
+    terapeuta:       'Terapeuta',
+    centro_terapias: 'Centro de terapias',
+    escuela:         'Escuela',
+  }
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -85,12 +121,10 @@ export default function Dashboard() {
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="text-slate-500 text-sm">
-            {user.user_metadata?.nombre || user.user_metadata?.full_name || user.email}
-          </span>
-          {esMedico && (
+          <span className="text-slate-500 text-sm">{nombreUsuario}</span>
+          {!esFamilia && badgeRol[rol] && (
             <span className="text-xs bg-green-50 text-green-700 border border-green-200 px-2 py-1 rounded-full font-semibold">
-              {user.user_metadata?.especialidad || 'Especialista'}
+              {badgeRol[rol]}
             </span>
           )}
           <button onClick={handleLogout} className="text-slate-400 hover:text-slate-700 text-sm transition-colors">
@@ -103,21 +137,15 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-slate-900 text-2xl font-semibold">
-              {esMedico
-                ? `Hola, Dr. ${user.user_metadata?.nombre?.split(" ")[0] || ''} 👋`
-                : `Hola, ${user.user_metadata?.full_name?.split(" ")[0] || 'familia'} 👋`}
+              {`Hola, ${prefijo ? prefijo + ' ' : ''}${primerNombre} 👋`}
             </h1>
             <p className="text-slate-500 text-sm mt-1">
-              {esMedico
-                ? pacientes.length === 0
-                  ? "Aún no tienes pacientes asignados"
-                  : `${pacientes.length} paciente${pacientes.length > 1 ? 's' : ''} bajo tu cuidado`
-                : pacientes.length === 0
-                  ? "Aún no tienes expedientes registrados"
-                  : `${pacientes.length} expediente${pacientes.length > 1 ? 's' : ''} activo${pacientes.length > 1 ? 's' : ''}`}
+              {pacientes.length === 0
+                ? esFamilia ? "Aún no tienes expedientes registrados" : "Aún no tienes pacientes asignados"
+                : `${pacientes.length} ${descRol}${pacientes.length > 1 ? 's' : ''}`}
             </p>
           </div>
-          {!esMedico && (
+          {esFamilia && (
             <Link
               href="/paciente/nuevo"
               className="bg-[#1A6BFF] hover:bg-[#1558d6] text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors"
@@ -131,16 +159,16 @@ export default function Dashboard() {
           <div className="text-slate-400 text-sm">Cargando...</div>
         ) : pacientes.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
-            <p className="text-4xl mb-4">{esMedico ? '🩺' : '👶'}</p>
+            <p className="text-4xl mb-4">{esFamilia ? '👶' : '🩺'}</p>
             <h2 className="text-slate-900 font-semibold mb-2">
-              {esMedico ? 'Sin pacientes asignados' : 'Registra tu primer paciente'}
+              {esFamilia ? 'Registra tu primer paciente' : 'Sin pacientes asignados'}
             </h2>
             <p className="text-slate-500 text-sm mb-6">
-              {esMedico
-                ? 'Cuando una familia te invite, verás sus pacientes aquí'
-                : 'Crea el expediente de tu hijo para empezar a coordinar su equipo médico'}
+              {esFamilia
+                ? 'Crea el expediente de tu hijo para empezar a coordinar su equipo médico'
+                : 'Cuando una familia te invite, verás sus pacientes aquí'}
             </p>
-            {!esMedico && (
+            {esFamilia && (
               <Link
                 href="/paciente/nuevo"
                 className="bg-[#1A6BFF] hover:bg-[#1558d6] text-white text-sm font-semibold px-6 py-3 rounded-xl transition-colors inline-block"
@@ -177,7 +205,7 @@ export default function Dashboard() {
                     ))}
                   </div>
                 )}
-                {esMedico && (
+                {!esFamilia && (
                   <p className="text-xs text-slate-400 mt-3">Expediente compartido contigo</p>
                 )}
               </Link>
