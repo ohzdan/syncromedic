@@ -29,6 +29,8 @@ type Nota = {
   autor_nombre: string;
   especialidad: string | null;
   firmada: boolean;
+  firma_fecha: string | null;
+  firma_nombre: string | null;
 };
 
 export default function NotasPage() {
@@ -42,11 +44,13 @@ export default function NotasPage() {
   const [notas, setNotas] = useState<Nota[]>([]);
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const [firmando, setFirmando] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [usuario, setUsuario] = useState<any>(null);
 
   const [modalAbierto, setModalAbierto] = useState(false);
   const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [modalFirma, setModalFirma] = useState<Nota | null>(null);
 
   // Formulario SOAP
   const [tipo, setTipo] = useState("");
@@ -155,6 +159,8 @@ export default function NotasPage() {
       autor_nombre:   usuario.full_name || "Usuario",
       especialidad:   usuario.especialidad || null,
       firmada:        false,
+      firma_fecha:    null,
+      firma_nombre:   null,
     });
 
     if (dbError) {
@@ -167,6 +173,25 @@ export default function NotasPage() {
     limpiarFormulario();
     await cargarNotas();
     setGuardando(false);
+  }
+
+  async function firmarNota(nota: Nota) {
+    setFirmando(nota.id);
+    const ahora = new Date().toISOString();
+    const { error } = await supabase
+      .from("notas_clinicas")
+      .update({
+        firmada: true,
+        firma_fecha: ahora,
+        firma_nombre: usuario.full_name,
+      })
+      .eq("id", nota.id);
+
+    if (!error) {
+      await cargarNotas();
+      setModalFirma(null);
+    }
+    setFirmando(null);
   }
 
   async function abrirImagen(nota: Nota) {
@@ -183,6 +208,13 @@ export default function NotasPage() {
   function formatFecha(fecha: string) {
     return new Date(fecha + "T12:00:00").toLocaleDateString("es-MX", {
       day: "numeric", month: "long", year: "numeric"
+    });
+  }
+
+  function formatFechaHora(fecha: string) {
+    return new Date(fecha).toLocaleDateString("es-MX", {
+      day: "numeric", month: "long", year: "numeric",
+      hour: "2-digit", minute: "2-digit"
     });
   }
 
@@ -264,8 +296,9 @@ export default function NotasPage() {
             {notasFiltradas.map(nota => {
               const tipoInfo = TIPOS_NOTA.find(t => t.id === nota.tipo_nota);
               const expandida = notaExpandida === nota.id;
+              const esAutor = usuario?.id === nota.autor_id;
               return (
-                <div key={nota.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                <div key={nota.id} className={`bg-white border rounded-2xl shadow-sm overflow-hidden ${nota.firmada ? "border-green-200" : "border-slate-200"}`}>
                   {/* Header de la nota */}
                   <div
                     className="flex items-start justify-between gap-4 p-5 cursor-pointer hover:bg-slate-50 transition-colors"
@@ -282,6 +315,11 @@ export default function NotasPage() {
                       <div className="text-right">
                         <p className="text-slate-600 text-xs font-medium">{nota.autor_nombre}</p>
                         {nota.especialidad && <p className="text-slate-400 text-xs">{nota.especialidad}</p>}
+                        {nota.firmada && (
+                          <span className="inline-block bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full font-medium mt-0.5">
+                            ✅ Firmada
+                          </span>
+                        )}
                       </div>
                       <span className="text-slate-300 text-sm">{expandida ? '▲' : '▼'}</span>
                     </div>
@@ -334,8 +372,27 @@ export default function NotasPage() {
                             🖼️ Ver imagen adjunta →
                           </button>
                         )}
-                        {nota.firmada && (
-                          <p className="text-xs text-green-600 font-medium">✅ Nota firmada</p>
+
+                        {/* Firma */}
+                        {nota.firmada && nota.firma_fecha ? (
+                          <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-3 mt-2">
+                            <p className="text-green-700 text-xs font-semibold">✅ Nota firmada electrónicamente</p>
+                            <p className="text-green-600 text-xs mt-0.5">
+                              {nota.firma_nombre} · {formatFechaHora(nota.firma_fecha)}
+                            </p>
+                            <p className="text-green-500 text-xs mt-1 opacity-70">
+                              Esta nota no puede ser modificada · NOM-004-SSA3-2012
+                            </p>
+                          </div>
+                        ) : esAutor ? (
+                          <button
+                            onClick={() => setModalFirma(nota)}
+                            className="mt-2 w-full border border-[#1A6BFF] text-[#1A6BFF] text-sm font-semibold py-2.5 rounded-xl hover:bg-blue-50 transition-colors"
+                          >
+                            ✍️ Firmar nota
+                          </button>
+                        ) : (
+                          <p className="text-slate-400 text-xs mt-2 italic">Pendiente de firma por el autor</p>
                         )}
                       </div>
                     </div>
@@ -354,7 +411,6 @@ export default function NotasPage() {
             <h2 className="text-slate-800 text-lg font-bold mb-5">Nueva nota clínica</h2>
             <div className="flex flex-col gap-4">
 
-              {/* Tipo */}
               <div>
                 <label className="text-slate-500 text-xs mb-2 block font-medium">Tipo de nota *</label>
                 <div className="grid grid-cols-2 gap-2">
@@ -370,130 +426,114 @@ export default function NotasPage() {
                 </div>
               </div>
 
-              {/* Fecha */}
               <div>
                 <label className="text-slate-500 text-xs mb-1 block font-medium">Fecha de la consulta *</label>
-                <input
-                  type="date"
-                  value={fechaConsulta}
-                  onChange={e => setFechaConsulta(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                />
+                <input type="date" value={fechaConsulta} onChange={e => setFechaConsulta(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
 
-              {/* Motivo */}
               <div>
                 <label className="text-slate-500 text-xs mb-1 block font-medium">Motivo de consulta</label>
-                <input
-                  type="text"
-                  value={motivo}
-                  onChange={e => setMotivo(e.target.value)}
+                <input type="text" value={motivo} onChange={e => setMotivo(e.target.value)}
                   placeholder="¿Por qué viene el paciente hoy?"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                />
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
 
-              {/* S - Subjetivo */}
               <div>
                 <label className="text-xs mb-1 block font-semibold text-[#1A6BFF]">S — Subjetivo</label>
                 <p className="text-xs text-slate-400 mb-1">Lo que reporta el paciente o la familia</p>
-                <textarea
-                  value={subjetivo}
-                  onChange={e => setSubjetivo(e.target.value)}
-                  placeholder="La mamá refiere que..."
-                  rows={3}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
-                />
+                <textarea value={subjetivo} onChange={e => setSubjetivo(e.target.value)}
+                  placeholder="La mamá refiere que..." rows={3}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
               </div>
 
-              {/* O - Objetivo */}
               <div>
                 <label className="text-xs mb-1 block font-semibold text-[#00C97A]">O — Objetivo</label>
                 <p className="text-xs text-slate-400 mb-1">Lo que el especialista observa o mide</p>
-                <textarea
-                  value={objetivo}
-                  onChange={e => setObjetivo(e.target.value)}
-                  placeholder="Paciente alerta, peso 18kg..."
-                  rows={3}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
-                />
+                <textarea value={objetivo} onChange={e => setObjetivo(e.target.value)}
+                  placeholder="Paciente alerta, peso 18kg..." rows={3}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
               </div>
 
-              {/* P - Plan */}
               <div>
                 <label className="text-xs mb-1 block font-semibold text-purple-500">P — Plan</label>
                 <p className="text-xs text-slate-400 mb-1">Diagnóstico y decisiones clínicas</p>
-                <textarea
-                  value={plan}
-                  onChange={e => setPlan(e.target.value)}
-                  placeholder="Continuar tratamiento, ajuste de dosis..."
-                  rows={3}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
-                />
+                <textarea value={plan} onChange={e => setPlan(e.target.value)}
+                  placeholder="Continuar tratamiento, ajuste de dosis..." rows={3}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
               </div>
 
-              {/* Indicaciones */}
               <div>
                 <label className="text-xs mb-1 block font-semibold text-amber-500">Indicaciones para la familia</label>
-                <textarea
-                  value={indicaciones}
-                  onChange={e => setIndicaciones(e.target.value)}
-                  placeholder="Administrar medicamento con alimentos..."
-                  rows={2}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
-                />
+                <textarea value={indicaciones} onChange={e => setIndicaciones(e.target.value)}
+                  placeholder="Administrar medicamento con alimentos..." rows={2}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
               </div>
 
-              {/* Próxima cita */}
               <div>
                 <label className="text-slate-500 text-xs mb-1 block font-medium">Próxima cita (opcional)</label>
-                <input
-                  type="date"
-                  value={proximaCita}
-                  onChange={e => setProximaCita(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]"
-                />
+                <input type="date" value={proximaCita} onChange={e => setProximaCita(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
 
-              {/* Imagen opcional */}
               <div>
                 <label className="text-slate-500 text-xs mb-1 block font-medium">Imagen adjunta (opcional)</label>
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#1A6BFF] transition-colors"
-                >
+                <div onClick={() => fileInputRef.current?.click()}
+                  className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#1A6BFF] transition-colors">
                   {preview ? (
                     <img src={preview} alt="preview" className="max-h-32 mx-auto rounded-lg object-contain" />
                   ) : (
                     <p className="text-slate-400 text-sm">📷 Toca para adjuntar imagen</p>
                   )}
                 </div>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".jpg,.jpeg,.png,.webp"
-                  onChange={onImagenSeleccionada}
-                  className="hidden"
-                />
+                <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png,.webp"
+                  onChange={onImagenSeleccionada} className="hidden" />
               </div>
 
               {error && <p className="text-red-500 text-sm">{error}</p>}
 
               <div className="flex gap-3 mt-2">
-                <button
-                  onClick={() => { setModalAbierto(false); limpiarFormulario(); }}
-                  className="flex-1 border border-slate-200 text-slate-600 text-sm font-medium py-3 rounded-xl hover:bg-slate-50 transition-colors"
-                >
+                <button onClick={() => { setModalAbierto(false); limpiarFormulario(); }}
+                  className="flex-1 border border-slate-200 text-slate-600 text-sm font-medium py-3 rounded-xl hover:bg-slate-50 transition-colors">
                   Cancelar
                 </button>
-                <button
-                  onClick={guardarNota}
-                  disabled={guardando}
-                  className="flex-1 bg-[#1A6BFF] hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold py-3 rounded-xl transition-colors"
-                >
+                <button onClick={guardarNota} disabled={guardando}
+                  className="flex-1 bg-[#1A6BFF] hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold py-3 rounded-xl transition-colors">
                   {guardando ? "Guardando..." : "Guardar nota"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal confirmar firma */}
+      {modalFirma && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <div className="text-center mb-5">
+              <div className="text-4xl mb-3">✍️</div>
+              <h2 className="text-slate-800 text-lg font-bold mb-2">Firmar nota clínica</h2>
+              <p className="text-slate-500 text-sm">Al firmar, esta nota quedará bloqueada y no podrá modificarse.</p>
+            </div>
+            <div className="bg-slate-50 rounded-xl p-4 mb-5">
+              <p className="text-slate-600 text-xs font-medium mb-1">Firmante</p>
+              <p className="text-slate-800 text-sm font-semibold">{usuario?.full_name}</p>
+              {usuario?.especialidad && <p className="text-slate-500 text-xs">{usuario.especialidad}</p>}
+              <p className="text-slate-400 text-xs mt-1">{new Date().toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+            </div>
+            <p className="text-slate-400 text-xs text-center mb-5">
+              En cumplimiento con NOM-004-SSA3-2012
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setModalFirma(null)}
+                className="flex-1 border border-slate-200 text-slate-600 text-sm font-medium py-3 rounded-xl hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={() => firmarNota(modalFirma)} disabled={firmando === modalFirma.id}
+                className="flex-1 bg-[#00C97A] hover:bg-green-600 disabled:opacity-50 text-white text-sm font-semibold py-3 rounded-xl transition-colors">
+                {firmando === modalFirma.id ? "Firmando..." : "Confirmar firma"}
+              </button>
             </div>
           </div>
         </div>
@@ -511,13 +551,12 @@ export default function NotasPage() {
                 <p className="text-slate-400 text-xs">{notaVisor.autor_nombre}</p>
               </div>
               <div className="flex gap-3 items-center">
-                <a href={urlVisor} target="_blank" rel="noopener noreferrer" className="text-[#1A6BFF] text-xs font-medium hover:underline">
+                <a href={urlVisor} target="_blank" rel="noopener noreferrer"
+                  className="text-[#1A6BFF] text-xs font-medium hover:underline">
                   Abrir en nueva pestaña →
                 </a>
-                <button
-                  onClick={() => { setNotaVisor(null); setUrlVisor(null); }}
-                  className="text-slate-400 hover:text-slate-600 text-xl font-bold"
-                >
+                <button onClick={() => { setNotaVisor(null); setUrlVisor(null); }}
+                  className="text-slate-400 hover:text-slate-600 text-xl font-bold">
                   ×
                 </button>
               </div>
