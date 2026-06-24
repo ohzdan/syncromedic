@@ -187,11 +187,9 @@ export default function NotasPage() {
       })
       .eq("id", nota.id);
 
-    if (!error) {
-      await cargarNotas();
-      setModalFirma(null);
-    }
+    setModalFirma(null);
     setFirmando(null);
+    await cargarNotas();
   }
 
   async function abrirImagen(nota: Nota) {
