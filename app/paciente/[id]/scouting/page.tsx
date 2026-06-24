@@ -74,6 +74,7 @@ const FLUJO: Pantalla[] = [
   { tipo: "paso", id: "diagnosticos" },
   { tipo: "paso", id: "alergias" },
   { tipo: "paso", id: "tipo_sangre" },
+  { tipo: "paso", id: "lateralidad" },
   { tipo: "intermedia", mensaje: "Vamos bien 👍", submensaje: "Ahora unas preguntas sobre el nacimiento. Ten a la mano cualquier documento del hospital si lo necesitas, pero no es indispensable." },
   { tipo: "paso", id: "embarazo_alto_riesgo" },
   { tipo: "paso", id: "complicaciones_embarazo" },
@@ -91,6 +92,9 @@ const FLUJO: Pantalla[] = [
   { tipo: "paso", id: "condiciones_cronicas" },
   { tipo: "intermedia", mensaje: "Una sección más 📋", submensaje: "Ten tu cartilla de vacunación a la mano para la siguiente parte. Si no la tienes ahorita, puedes omitir y completarla después." },
   { tipo: "paso", id: "vacunas" },
+  { tipo: "paso", id: "sueno" },
+  { tipo: "paso", id: "alimentacion" },
+  { tipo: "paso", id: "entorno" },
   { tipo: "paso", id: "emergencia" },
   { tipo: "resumen" },
 ];
@@ -146,6 +150,16 @@ export default function ScoutingPage() {
   const [tamizAuditivo, setTamizAuditivo] = useState("");
   const [tamizCardiaco, setTamizCardiaco] = useState("");
 
+  // Nuevos campos
+  const [lateralidad, setLateralidad] = useState("");
+  const [hermanos, setHermanos] = useState("");
+  const [alimentacionNotas, setAlimentacionNotas] = useState("");
+  const [suenoHoraDormir, setSuenoHoraDormir] = useState("");
+  const [suenoHoraDespertar, setSuenoHoraDespertar] = useState("");
+  const [suenoColecho, setSuenoColecho] = useState("");
+  const [escuelaRegular, setEscuelaRegular] = useState("");
+  const [conQuienVive, setConQuienVive] = useState("");
+
   useEffect(() => { cargarPaciente(); }, []);
 
   async function cargarPaciente() {
@@ -182,6 +196,14 @@ export default function ScoutingPage() {
     setTamizMetabolico(data.tamiz_metabolico || "");
     setTamizAuditivo(data.tamiz_auditivo || "");
     setTamizCardiaco(data.tamiz_cardiaco || "");
+    setLateralidad(data.lateralidad || "");
+    setHermanos(data.hermanos || "");
+    setAlimentacionNotas(data.alimentacion_notas || "");
+    setSuenoHoraDormir(data.sueno_hora_dormir || "");
+    setSuenoHoraDespertar(data.sueno_hora_despertar || "");
+    setSuenoColecho(data.sueno_colecho || "");
+    setEscuelaRegular(data.escuela_regular || "");
+    setConQuienVive(data.con_quien_vive || "");
   }
 
   function limpiarCampos() {
@@ -201,6 +223,26 @@ export default function ScoutingPage() {
     if (id === "tamices") { setTamizMetabolico(data.tamiz_metabolico || ""); setTamizAuditivo(data.tamiz_auditivo || ""); setTamizCardiaco(data.tamiz_cardiaco || ""); }
   }
 
+  function toggleAntFamiliar(condId: string, parentesco: string) {
+    setAntFamiliares(prev => {
+      const actual = prev[condId] || [];
+      const esNinguno = parentesco === "Ninguno" || parentesco === "No sé";
+      const clickandoExclusivo = esNinguno;
+
+      if (clickandoExclusivo) {
+        // Si ya está seleccionado, deseleccionar
+        if (actual.includes(parentesco)) return { ...prev, [condId]: [] };
+        // Si no, seleccionar solo este y quitar todos los demás
+        return { ...prev, [condId]: [parentesco] };
+      } else {
+        // Si selecciona un parentesco normal, quitar Ninguno y No sé
+        const sinExclusivos = actual.filter((x: string) => x !== "Ninguno" && x !== "No sé");
+        const yaEsta = sinExclusivos.includes(parentesco);
+        return { ...prev, [condId]: yaEsta ? sinExclusivos.filter((x: string) => x !== parentesco) : [...sinExclusivos, parentesco] };
+      }
+    });
+  }
+
   async function guardarPaso(omitir = false) {
     setGuardando(true);
     const pantalla = FLUJO[indice];
@@ -213,6 +255,7 @@ export default function ScoutingPage() {
       if (id === "diagnosticos") update.diagnosticos_principales = tags;
       if (id === "alergias") update.alergias = tags;
       if (id === "tipo_sangre") update.tipo_sangre = selectVal || null;
+      if (id === "lateralidad") update.lateralidad = lateralidad || null;
       if (id === "embarazo_alto_riesgo") update.embarazo_alto_riesgo = bool1 || null;
       if (id === "complicaciones_embarazo") { update.complicaciones_embarazo = bool1 || null; update.diabetes_gestacional = bool2 || null; }
       if (id === "parto") { update.semanas_gestacion = selectVal ? parseInt(selectVal) : null; update.tipo_parto = bool1 || null; }
@@ -226,6 +269,9 @@ export default function ScoutingPage() {
       if (id === "historial_medico") { update.cirugias_previas = cirugias || null; update.hospitalizaciones_previas = hospitalizaciones || null; }
       if (id === "condiciones_cronicas") update.condiciones_cronicas = condicionesSeleccionadas;
       if (id === "vacunas") { update.vacunas = { lista: vacunasSeleccionadas }; update.vacunas_otras = vacunasOtras || null; }
+      if (id === "sueno") { update.sueno_hora_dormir = suenoHoraDormir || null; update.sueno_hora_despertar = suenoHoraDespertar || null; update.sueno_colecho = suenoColecho || null; }
+      if (id === "alimentacion") update.alimentacion_notas = alimentacionNotas || null;
+      if (id === "entorno") { update.con_quien_vive = conQuienVive || null; update.escuela_regular = escuelaRegular || null; update.hermanos = hermanos || null; }
       if (id === "emergencia") {
         update.contacto_emergencia = { nombre: contactoNombre, telefono: contactoTel, parentesco: contactoParentesco };
         update.hospital_preferencia = hospitalPref || null;
@@ -269,14 +315,6 @@ export default function ScoutingPage() {
 
   function toggleTerapia(t: string) {
     setTerapiasSeleccionadas(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
-  }
-
-  function toggleAntFamiliar(condId: string, parentesco: string) {
-    setAntFamiliares(prev => {
-      const actual = prev[condId] || [];
-      const yaEsta = actual.includes(parentesco);
-      return { ...prev, [condId]: yaEsta ? actual.filter((x: string) => x !== parentesco) : [...actual, parentesco] };
-    });
   }
 
   function agregarTag() {
@@ -363,10 +401,14 @@ export default function ScoutingPage() {
           <ResumenItem label="Diagnósticos" valor={paciente?.diagnosticos_principales?.join(", ")} onEditar={() => irAPaso("diagnosticos")} />
           <ResumenItem label="Alergias" valor={paciente?.alergias?.join(", ")} onEditar={() => irAPaso("alergias")} />
           <ResumenItem label="Tipo de sangre" valor={paciente?.tipo_sangre} onEditar={() => irAPaso("tipo_sangre")} />
+          <ResumenItem label="Lateralidad" valor={paciente?.lateralidad} onEditar={() => irAPaso("lateralidad")} />
           <ResumenItem label="Tipo de parto" valor={paciente?.tipo_parto} onEditar={() => irAPaso("parto")} />
           <ResumenItem label="Peso al nacer" valor={paciente?.peso_nacer} onEditar={() => irAPaso("nacimiento")} />
           <ResumenItem label="APGAR" valor={paciente?.apgar} onEditar={() => irAPaso("ucin_apgar")} />
           <ResumenItem label="Terapias actuales" valor={paciente?.terapias_actuales?.join(", ")} onEditar={() => irAPaso("terapias")} />
+          <ResumenItem label="Sueño" valor={paciente?.sueno_hora_dormir ? `Duerme ${paciente.sueno_hora_dormir} · Despierta ${paciente.sueno_hora_despertar}` : null} onEditar={() => irAPaso("sueno")} />
+          <ResumenItem label="Escuela regular" valor={paciente?.escuela_regular} onEditar={() => irAPaso("entorno")} />
+          <ResumenItem label="Con quién vive" valor={paciente?.con_quien_vive} onEditar={() => irAPaso("entorno")} />
           <ResumenItem label="Vacunas registradas" valor={paciente?.vacunas?.lista?.length ? `${paciente.vacunas.lista.length} vacunas` : null} onEditar={() => irAPaso("vacunas")} />
           <ResumenItem label="Contacto de emergencia" valor={paciente?.contacto_emergencia?.nombre} onEditar={() => irAPaso("emergencia")} sinBorde />
         </div>
@@ -400,6 +442,8 @@ export default function ScoutingPage() {
           {pasoId === "alergias" && <PasoTags titulo="Alergias conocidas" descripcion="¿Tu hijo/a tiene alguna alergia conocida?" ayuda="Incluye medicamentos, alimentos o alergias ambientales." placeholder="Ej: Penicilina" tags={tags} tagInput={tagInput} onInputChange={setTagInput} onAgregar={agregarTag} onQuitar={(t: string) => setTags(tags.filter((x: string) => x !== t))} />}
 
           {pasoId === "tipo_sangre" && <PasoOpciones titulo="Tipo de sangre" descripcion="¿Cuál es el tipo de sangre de tu hijo/a?" opciones={["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-", "No sé"]} valor={selectVal} onChange={setSelectVal} />}
+
+          {pasoId === "lateralidad" && <PasoOpciones titulo="Lateralidad" descripcion="¿Tu hijo/a es...?" opciones={["Diestro/a", "Zurdo/a", "Ambidiestro/a", "No definida aún"]} valor={lateralidad} onChange={setLateralidad} />}
 
           {pasoId === "embarazo_alto_riesgo" && <PasoOpciones titulo="Embarazo de alto riesgo" descripcion="¿El embarazo fue clasificado como de alto riesgo?" opciones={["Sí", "No", "No sé"]} valor={bool1} onChange={setBool1} />}
 
@@ -509,7 +553,7 @@ export default function ScoutingPage() {
           {pasoId === "antecedentes_familiares" && (
             <div>
               <h2 className="text-slate-800 text-xl font-semibold mb-1">Antecedentes familiares</h2>
-              <p className="text-slate-500 text-sm mb-6">Para cada condición, indica quién en la familia directa la tiene. Puedes seleccionar varios.</p>
+              <p className="text-slate-500 text-sm mb-6">Para cada condición, indica quién en la familia directa la tiene.</p>
               <div className="flex flex-col gap-5">
                 {ANTECEDENTES_FAMILIARES.map(({ id, label }) => (
                   <div key={id}>
@@ -577,6 +621,51 @@ export default function ScoutingPage() {
                 <label className="text-slate-500 text-xs mb-1 block">Otras vacunas no listadas</label>
                 <input type="text" value={vacunasOtras} onChange={e => setVacunasOtras(e.target.value)} placeholder="Ej: Meningocócica B, Rotavirus adicional" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
               </div>
+            </div>
+          )}
+
+          {pasoId === "sueno" && (
+            <div className="flex flex-col gap-5">
+              <h2 className="text-slate-800 text-xl font-semibold mb-1">Sueño</h2>
+              <p className="text-slate-500 text-sm mb-2">Rutina de sueño habitual de tu hijo/a.</p>
+              <div>
+                <label className="text-slate-600 text-sm mb-1 block">¿A qué hora se duerme normalmente?</label>
+                <input type="text" value={suenoHoraDormir} onChange={e => setSuenoHoraDormir(e.target.value)} placeholder="Ej: 9:00 pm" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+              </div>
+              <div>
+                <label className="text-slate-600 text-sm mb-1 block">¿A qué hora despierta normalmente?</label>
+                <input type="text" value={suenoHoraDespertar} onChange={e => setSuenoHoraDespertar(e.target.value)} placeholder="Ej: 7:00 am" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+              </div>
+              <PasoOpciones titulo="¿Hace colecho?" descripcion="¿Duerme en la misma cama con algún familiar?" opciones={["Sí", "No", "A veces"]} valor={suenoColecho} onChange={setSuenoColecho} />
+            </div>
+          )}
+
+          {pasoId === "alimentacion" && (
+            <div className="flex flex-col gap-4">
+              <h2 className="text-slate-800 text-xl font-semibold mb-1">Alimentación</h2>
+              <p className="text-slate-500 text-sm mb-2">Describe brevemente la alimentación de tu hijo/a — restricciones, selectividad o cualquier detalle relevante.</p>
+              <textarea
+                value={alimentacionNotas}
+                onChange={e => setAlimentacionNotas(e.target.value)}
+                placeholder="Ej: Come solo ciertos colores de alimentos, rechaza texturas blandas, sin gluten por indicación médica..."
+                rows={5}
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none"
+              />
+            </div>
+          )}
+
+          {pasoId === "entorno" && (
+            <div className="flex flex-col gap-5">
+              <h2 className="text-slate-800 text-xl font-semibold mb-1">Entorno familiar</h2>
+              <div>
+                <label className="text-slate-600 text-sm mb-1 block">¿Con quién vive tu hijo/a?</label>
+                <input type="text" value={conQuienVive} onChange={e => setConQuienVive(e.target.value)} placeholder="Ej: Papá, mamá y dos hermanos mayores" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+              </div>
+              <div>
+                <label className="text-slate-600 text-sm mb-1 block">Hermanos (edades aproximadas)</label>
+                <input type="text" value={hermanos} onChange={e => setHermanos(e.target.value)} placeholder="Ej: Hermana de 10 años, hermano de 5 años" className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+              </div>
+              <PasoOpciones titulo="¿Asiste a escuela regular?" descripcion="" opciones={["Sí, escuela regular", "Sí, escuela especial", "Mixto (regular y apoyo especial)", "No asiste actualmente"]} valor={escuelaRegular} onChange={setEscuelaRegular} />
             </div>
           )}
 
