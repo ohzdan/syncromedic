@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 const VACUNAS_MEXICO = [
@@ -105,6 +105,8 @@ export default function ScoutingPage() {
   const router = useRouter();
   const supabase = createClient();
 
+const searchParams = useSearchParams();
+  const modoEditar = searchParams.get("modo") === "editar";
   const [indice, setIndice] = useState(0);
   const [paciente, setPaciente] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -166,7 +168,9 @@ export default function ScoutingPage() {
     const { data } = await supabase.from("pacientes").select("*").eq("id", pacienteId).single();
     if (data) {
       setPaciente(data);
-      const idx = Math.min(data.scouting_paso || 0, FLUJO.length - 1);
+     const idx = modoEditar
+        ? FLUJO.length - 1
+        : Math.min(data.scouting_paso || 0, FLUJO.length - 1);
       setIndice(idx);
       cargarEstadoGlobal(data);
     }

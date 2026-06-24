@@ -75,6 +75,12 @@ export default function ExpedientePaciente() {
               </div>
             )}
           </div>
+          <Link
+            href={`/paciente/${params.id}/scouting?modo=editar`}
+            className="text-slate-400 hover:text-[#1A6BFF] text-xs font-medium transition-colors whitespace-nowrap"
+          >
+            ✏️ Editar perfil
+          </Link>
         </div>
 
         {paciente.alergias?.length > 0 && (
