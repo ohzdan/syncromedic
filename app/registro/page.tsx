@@ -24,7 +24,7 @@ export default function Registro() {
     if (error) {
       setError("Ocurrió un error al crear tu cuenta. Intenta de nuevo.");
     } else {
-      router.push("/dashboard");
+      router.push("/consentimiento");
     }
     setLoading(false);
   }
