@@ -1,25 +1,23 @@
-Set-Content -Path "middleware.ts" -Value @'
-import { createServerClient } from '@supabase/ssr'
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+$content = @'
+import { createServerClient } from "@supabase/ssr"
+import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Rutas públicas — no requieren suscripción
   const publicPaths = [
-    '/registro',
-    '/login',
-    '/consentimiento',
-    '/invitacion',
-    '/suscripcion',
-    '/api',
+    "/registro",
+    "/login",
+    "/consentimiento",
+    "/invitacion",
+    "/suscripcion",
+    "/api",
   ]
 
   const isPublic = publicPaths.some(path => pathname.startsWith(path))
   if (isPublic) return NextResponse.next()
 
-  // Crear cliente Supabase desde cookies
   let response = NextResponse.next()
 
   const supabase = createServerClient(
@@ -39,36 +37,33 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  // Verificar sesión
   const { data: { user } } = await supabase.auth.getUser()
 
   if (!user) {
-    return NextResponse.redirect(new URL('/registro', request.url))
+    return NextResponse.redirect(new URL("/registro", request.url))
   }
 
-  // Solo familias requieren verificación de suscripción
   const { data: userData } = await supabase
-    .from('users')
-    .select('role')
-    .eq('id', user.id)
+    .from("users")
+    .select("role")
+    .eq("id", user.id)
     .single()
 
-  if (userData?.role !== 'familia') return response
+  if (userData?.role !== "familia") return response
 
-  // Verificar suscripción activa
   const { data: suscripcion } = await supabase
-    .from('suscripciones')
-    .select('estado, fecha_vencimiento')
-    .eq('familia_id', user.id)
+    .from("suscripciones")
+    .select("estado, fecha_vencimiento")
+    .eq("familia_id", user.id)
     .single()
 
   const tieneAcceso =
     suscripcion &&
-    (suscripcion.estado === 'activa' || suscripcion.estado === 'trial') &&
+    (suscripcion.estado === "activa" || suscripcion.estado === "trial") &&
     new Date(suscripcion.fecha_vencimiento) > new Date()
 
   if (!tieneAcceso) {
-    return NextResponse.redirect(new URL('/suscripcion', request.url))
+    return NextResponse.redirect(new URL("/suscripcion", request.url))
   }
 
   return response
@@ -76,7 +71,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 }
 '@
+
+[System.IO.File]::WriteAllText("$PWD\middleware.ts", $content, [System.Text.Encoding]::UTF8)
