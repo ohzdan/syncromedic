@@ -1,4 +1,3 @@
-[System.IO.File]::WriteAllText("C:\Users\osdam\syncromedic\app\suscripcion\page.tsx", @'
 "use client"
 
 import { useState, useEffect } from "react"
@@ -362,4 +361,3 @@ export default function SuscripcionPage() {
     </div>
   )
 }
-'@)
