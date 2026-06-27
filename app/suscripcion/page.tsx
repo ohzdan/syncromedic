@@ -81,8 +81,14 @@ export default function SuscripcionPage() {
 
   async function handleActivarBeta() {
     setLoadingPago(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { setLoadingPago(false); return }
+  const { data: { user } } = await supabase.auth.getUser()
+if (!user) { setLoadingPago(false); return }
+
+const { data: perfil } = await supabase
+  .from("users")
+  .select("nombre_completo")
+  .eq("id", user.id)
+  .single()
 
     const fechaVencimiento = new Date(Date.now() + (codigoAplicado!.meses_duracion ?? 3) * 30 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -124,17 +130,14 @@ export default function SuscripcionPage() {
         // 2. Enviar token al backend
         const planId = codigoAplicado?.conekta_plan_id ?? "plan-mensual-389"
 
-        const res = await fetch("/api/conekta/suscribir", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            token: token.id,
-            planId,
-            familiaId: user.email,
-            codigoUsado: codigoAplicado ? codigo.trim().toUpperCase() : null,
-          }),
-        })
-
+        
+body: JSON.stringify({
+  token: token.id,
+  planId,
+  familiaId: user.email,
+  nombre: perfil?.nombre_completo ?? "Cliente SyncroMedic",
+  codigoUsado: codigoAplicado ? codigo.trim().toUpperCase() : null,
+}),
         const data = await res.json()
 
         if (!res.ok) {

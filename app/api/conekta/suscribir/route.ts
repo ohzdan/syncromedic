@@ -2,10 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, planId, familiaId } = await req.json()
+    const { token, planId, familiaId, nombre } = await req.json()
 
     const privateKey = process.env.CONEKTA_PRIVATE_KEY!
     const authHeader = "Basic " + Buffer.from(privateKey + ":").toString("base64")
+
+    // Usar nombre real o fallback limpio
+    const nombreCliente = nombre?.trim() || "Cliente SyncroMedic"
 
     // 1. Crear cliente en Conekta
     const clienteRes = await fetch("https://api.conekta.io/customers", {
@@ -16,7 +19,7 @@ export async function POST(req: NextRequest) {
         "Authorization": authHeader,
       },
       body: JSON.stringify({
-        name: familiaId,
+        name: nombreCliente,
         email: familiaId,
         payment_sources: [{
           type: "card",
