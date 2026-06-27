@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase"
 
 export async function POST(req: NextRequest) {
   try {
-    const { token, planId, codigoUsado, familiaId } = await req.json()
+    const { token, planId, familiaId } = await req.json()
 
     const privateKey = process.env.CONEKTA_PRIVATE_KEY!
     const authHeader = "Basic " + Buffer.from(privateKey + ":").toString("base64")
@@ -27,6 +26,8 @@ export async function POST(req: NextRequest) {
     })
 
     const cliente = await clienteRes.json()
+    console.log("CONEKTA CLIENTE STATUS:", clienteRes.status)
+    console.log("CONEKTA CLIENTE RESPONSE:", JSON.stringify(cliente))
 
     if (!clienteRes.ok) {
       return NextResponse.json({ error: cliente }, { status: 400 })
@@ -46,6 +47,8 @@ export async function POST(req: NextRequest) {
     })
 
     const suscripcion = await suscRes.json()
+    console.log("CONEKTA SUSCRIPCION STATUS:", suscRes.status)
+    console.log("CONEKTA SUSCRIPCION RESPONSE:", JSON.stringify(suscripcion))
 
     if (!suscRes.ok) {
       return NextResponse.json({ error: suscripcion }, { status: 400 })
