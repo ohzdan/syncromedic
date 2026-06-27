@@ -1,3 +1,4 @@
+[System.IO.File]::WriteAllText("C:\Users\osdam\syncromedic\app\suscripcion\page.tsx", @'
 "use client"
 
 import { useState, useEffect } from "react"
@@ -35,7 +36,6 @@ export default function SuscripcionPage() {
   const [loadingPago, setLoadingPago] = useState(false)
   const [errorPago, setErrorPago] = useState("")
 
-  // Campos de tarjeta
   const [card, setCard] = useState({
     number: "",
     name: "",
@@ -81,14 +81,8 @@ export default function SuscripcionPage() {
 
   async function handleActivarBeta() {
     setLoadingPago(true)
-  const { data: { user } } = await supabase.auth.getUser()
-if (!user) { setLoadingPago(false); return }
-
-const { data: perfil } = await supabase
-  .from("users")
-  .select("nombre_completo")
-  .eq("id", user.id)
-  .single()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { setLoadingPago(false); return }
 
     const fechaVencimiento = new Date(Date.now() + (codigoAplicado!.meses_duracion ?? 3) * 30 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -115,7 +109,12 @@ const { data: perfil } = await supabase
     const { data: { user } } = await supabase.auth.getUser()
     if (!user) { setLoadingPago(false); return }
 
-    // 1. Tokenizar tarjeta con Conekta.js
+    const { data: perfil } = await supabase
+      .from("users")
+      .select("nombre_completo")
+      .eq("id", user.id)
+      .single()
+
     window.Conekta.Token.create(
       {
         card: {
@@ -127,17 +126,20 @@ const { data: perfil } = await supabase
         },
       },
       async (token) => {
-        // 2. Enviar token al backend
         const planId = codigoAplicado?.conekta_plan_id ?? "plan-mensual-389"
 
-        
-body: JSON.stringify({
-  token: token.id,
-  planId,
-  familiaId: user.email,
-  nombre: perfil?.nombre_completo ?? "Cliente SyncroMedic",
-  codigoUsado: codigoAplicado ? codigo.trim().toUpperCase() : null,
-}),
+        const res = await fetch("/api/conekta/suscribir", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            token: token.id,
+            planId,
+            familiaId: user.email,
+            nombre: perfil?.nombre_completo ?? "Cliente SyncroMedic",
+            codigoUsado: codigoAplicado ? codigo.trim().toUpperCase() : null,
+          }),
+        })
+
         const data = await res.json()
 
         if (!res.ok) {
@@ -146,7 +148,6 @@ body: JSON.stringify({
           return
         }
 
-        // 3. Guardar suscripción en Supabase
         await supabase.from("suscripciones").insert({
           familia_id: user.id,
           estado: "activa",
@@ -237,7 +238,6 @@ body: JSON.stringify({
           </div>
         </div>
 
-        {/* Código promocional */}
         <div style={{ marginBottom: "24px" }}>
           <label style={labelStyle}>¿Tienes un código promocional?</label>
           <div style={{ display: "flex", gap: "8px" }}>
@@ -270,7 +270,6 @@ body: JSON.stringify({
           {codigoAplicado && <p style={{ color: "#00C97A", fontSize: "13px", marginTop: "6px", fontWeight: 600 }}>{describeBeneficio()}</p>}
         </div>
 
-        {/* Formulario de tarjeta — solo si NO es beta */}
         {!esBeta && (
           <div style={{ marginBottom: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
             <div>
@@ -363,3 +362,4 @@ body: JSON.stringify({
     </div>
   )
 }
+'@)
