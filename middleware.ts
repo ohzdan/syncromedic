@@ -37,16 +37,16 @@ export async function middleware(request: NextRequest) {
 
   if (userData?.role !== "familia") return response
 
-  const { data: suscripcion } = await supabase
+  const { data: suscripciones } = await supabase
     .from("suscripciones")
     .select("estado, fecha_vencimiento")
     .eq("familia_id", user.id)
-    .single()
+    .order("created_at", { ascending: false })
 
-  const tieneAcceso =
-    suscripcion &&
-    (suscripcion.estado === "activa" || suscripcion.estado === "trial") &&
-    new Date(suscripcion.fecha_vencimiento) > new Date()
+  const tieneAcceso = suscripciones?.some(s =>
+    (s.estado === "activa" || s.estado === "trial") &&
+    new Date(s.fecha_vencimiento) > new Date()
+  )
 
   if (!tieneAcceso) return NextResponse.redirect(new URL("/suscripcion", request.url))
 
