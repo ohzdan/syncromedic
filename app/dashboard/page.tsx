@@ -27,6 +27,8 @@ export default function Dashboard() {
   const [pacientes, setPacientes] = useState<any[]>([]);
   const [rol, setRol] = useState<Rol>('familia');
   const [loading, setLoading] = useState(true);
+  const [suscripcion, setSuscripcion] = useState<any>(null);
+  const [cancelando, setCancelando] = useState(false);
   const router = useRouter();
   const supabase = createClient();
 
@@ -36,7 +38,6 @@ export default function Dashboard() {
       if (!user) { router.push("/"); return; }
       setUser(user);
 
-      // Leer rol desde la tabla users (fuente de verdad)
       const { data: userData } = await supabase
         .from('users')
         .select('role')
@@ -54,8 +55,20 @@ export default function Dashboard() {
           .is("deleted_at", null)
           .order("created_at", { ascending: false });
         setPacientes(data || []);
+
+        // Cargar suscripción activa más reciente
+        const { data: suscripciones } = await supabase
+          .from("suscripciones")
+          .select("*")
+          .eq("familia_id", user.id)
+          .order("created_at", { ascending: false });
+
+        const activa = suscripciones?.find(s =>
+          (s.estado === "activa" || s.estado === "trial") &&
+          new Date(s.fecha_vencimiento) > new Date()
+        )
+        setSuscripcion(activa || suscripciones?.[0] || null)
       } else {
-        // Todos los roles no-familia ven sus pacientes por expediente_accesos
         const { data: accesos } = await supabase
           .from("expediente_accesos")
           .select("paciente_id")
@@ -85,6 +98,17 @@ export default function Dashboard() {
     router.push("/");
   }
 
+  async function handleCancelar() {
+    if (!confirm("¿Seguro que deseas cancelar tu suscripción? Perderás acceso al vencimiento actual.")) return
+    setCancelando(true)
+    await supabase
+      .from("suscripciones")
+      .update({ estado: "cancelada" })
+      .eq("id", suscripcion.id)
+    setSuscripcion({ ...suscripcion, estado: "cancelada" })
+    setCancelando(false)
+  }
+
   function calcularEdad(fechaNacimiento: string) {
     const hoy = new Date();
     const nacimiento = new Date(fechaNacimiento);
@@ -92,6 +116,21 @@ export default function Dashboard() {
     const m = hoy.getMonth() - nacimiento.getMonth();
     if (m < 0 || (m === 0 && hoy.getDate() < nacimiento.getDate())) edad--;
     return edad;
+  }
+
+  function formatFecha(fecha: string) {
+    return new Date(fecha).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" })
+  }
+
+  function badgeEstado(estado: string) {
+    const map: Record<string, { label: string; color: string }> = {
+      activa:    { label: "Activa", color: "#00C97A" },
+      trial:     { label: "Periodo beta", color: "#1A6BFF" },
+      vencida:   { label: "Vencida", color: "#ef4444" },
+      cancelada: { label: "Cancelada", color: "#94a3b8" },
+      pausada:   { label: "Pausada", color: "#f59e0b" },
+    }
+    return map[estado] ?? { label: estado, color: "#94a3b8" }
   }
 
   if (!user) return null;
@@ -157,60 +196,133 @@ export default function Dashboard() {
 
         {loading ? (
           <div className="text-slate-400 text-sm">Cargando...</div>
-        ) : pacientes.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
-            <p className="text-4xl mb-4">{esFamilia ? '👶' : '🩺'}</p>
-            <h2 className="text-slate-900 font-semibold mb-2">
-              {esFamilia ? 'Registra tu primer paciente' : 'Sin pacientes asignados'}
-            </h2>
-            <p className="text-slate-500 text-sm mb-6">
-              {esFamilia
-                ? 'Crea el expediente de tu hijo para empezar a coordinar su equipo médico'
-                : 'Cuando una familia te invite, verás sus pacientes aquí'}
-            </p>
-            {esFamilia && (
-              <Link
-                href="/paciente/nuevo"
-                className="bg-[#1A6BFF] hover:bg-[#1558d6] text-white text-sm font-semibold px-6 py-3 rounded-xl transition-colors inline-block"
-              >
-                Crear expediente
-              </Link>
-            )}
-          </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {pacientes.map((paciente) => (
-              <Link
-                key={paciente.id}
-                href={`/paciente/${paciente.id}`}
-                className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm"
-              >
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-xl">
-                    👤
+          <>
+            {pacientes.length === 0 ? (
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+                <p className="text-4xl mb-4">{esFamilia ? '👶' : '🩺'}</p>
+                <h2 className="text-slate-900 font-semibold mb-2">
+                  {esFamilia ? 'Registra tu primer paciente' : 'Sin pacientes asignados'}
+                </h2>
+                <p className="text-slate-500 text-sm mb-6">
+                  {esFamilia
+                    ? 'Crea el expediente de tu hijo para empezar a coordinar su equipo médico'
+                    : 'Cuando una familia te invite, verás sus pacientes aquí'}
+                </p>
+                {esFamilia && (
+                  <Link
+                    href="/paciente/nuevo"
+                    className="bg-[#1A6BFF] hover:bg-[#1558d6] text-white text-sm font-semibold px-6 py-3 rounded-xl transition-colors inline-block"
+                  >
+                    Crear expediente
+                  </Link>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {pacientes.map((paciente) => (
+                  <Link
+                    key={paciente.id}
+                    href={`/paciente/${paciente.id}`}
+                    className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm"
+                  >
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-xl">
+                        👤
+                      </div>
+                      <div>
+                        <h2 className="text-slate-900 font-semibold">{paciente.nombre}</h2>
+                        <p className="text-slate-500 text-sm">
+                          {calcularEdad(paciente.fecha_nacimiento)} años · {paciente.sexo || "—"}
+                        </p>
+                      </div>
+                    </div>
+                    {paciente.diagnosticos_principales?.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {paciente.diagnosticos_principales.map((dx: string, i: number) => (
+                          <span key={i} className="text-xs bg-blue-50 text-[#1A6BFF] px-2 py-1 rounded-full border border-blue-100">
+                            {dx}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {!esFamilia && (
+                      <p className="text-xs text-slate-400 mt-3">Expediente compartido contigo</p>
+                    )}
+                  </Link>
+                ))}
+              </div>
+            )}
+
+            {/* Sección Mi Suscripción — solo familia */}
+            {esFamilia && suscripcion && (
+              <div className="mt-10">
+                <h2 className="text-slate-700 font-semibold text-sm mb-3 uppercase tracking-wide">Mi suscripción</h2>
+                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl">💳</span>
+                      <div>
+                        <p className="text-slate-900 font-semibold text-sm">
+                          {suscripcion.conekta_plan_id === "plan-beta-3meses" ? "Plan Beta" : "Plan Mensual $389 MXN"}
+                        </p>
+                        <p className="text-slate-400 text-xs">
+                          {suscripcion.codigo_usado ? `Código: ${suscripcion.codigo_usado}` : "Sin código promocional"}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className="text-xs font-semibold px-3 py-1 rounded-full"
+                      style={{
+                        background: badgeEstado(suscripcion.estado).color + "20",
+                        color: badgeEstado(suscripcion.estado).color,
+                      }}
+                    >
+                      {badgeEstado(suscripcion.estado).label}
+                    </span>
                   </div>
-                  <div>
-                    <h2 className="text-slate-900 font-semibold">{paciente.nombre}</h2>
-                    <p className="text-slate-500 text-sm">
-                      {calcularEdad(paciente.fecha_nacimiento)} años · {paciente.sexo || "—"}
+
+                  <div className="grid grid-cols-2 gap-4 text-sm mb-4">
+                    <div>
+                      <p className="text-slate-400 text-xs mb-1">Inicio</p>
+                      <p className="text-slate-700 font-medium">{formatFecha(suscripcion.fecha_inicio)}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-400 text-xs mb-1">
+                        {suscripcion.estado === "cancelada" ? "Acceso hasta" : "Próxima renovación"}
+                      </p>
+                      <p className="text-slate-700 font-medium">{formatFecha(suscripcion.fecha_vencimiento)}</p>
+                    </div>
+                  </div>
+
+                  {(suscripcion.estado === "activa" || suscripcion.estado === "trial") && (
+                    <button
+                      onClick={handleCancelar}
+                      disabled={cancelando}
+                      className="text-xs text-slate-400 hover:text-red-500 transition-colors underline"
+                    >
+                      {cancelando ? "Cancelando..." : "Cancelar suscripción"}
+                    </button>
+                  )}
+
+                  {suscripcion.estado === "cancelada" && (
+                    <p className="text-xs text-slate-400">
+                      Tu suscripción fue cancelada. Tendrás acceso hasta el {formatFecha(suscripcion.fecha_vencimiento)}.
                     </p>
-                  </div>
+                  )}
+
+                  {suscripcion.estado === "vencida" && (
+                    <Link
+                      href="/suscripcion"
+                      className="text-xs text-[#1A6BFF] font-semibold hover:underline"
+                    >
+                      Renovar suscripción →
+                    </Link>
+                  )}
                 </div>
-                {paciente.diagnosticos_principales?.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
-                    {paciente.diagnosticos_principales.map((dx: string, i: number) => (
-                      <span key={i} className="text-xs bg-blue-50 text-[#1A6BFF] px-2 py-1 rounded-full border border-blue-100">
-                        {dx}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {!esFamilia && (
-                  <p className="text-xs text-slate-400 mt-3">Expediente compartido contigo</p>
-                )}
-              </Link>
-            ))}
-          </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </main>
