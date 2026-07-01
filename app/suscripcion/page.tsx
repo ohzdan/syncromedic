@@ -19,6 +19,8 @@ declare global {
   }
 }
 
+const LIMITE_USOS_BETA_POR_FAMILIA = 3
+
 export default function SuscripcionPage() {
   const supabase = createClient()
   const router = useRouter()
@@ -56,19 +58,51 @@ export default function SuscripcionPage() {
     setCodigoAplicado(null)
     setLoadingCodigo(true)
 
+    const codigoLimpio = codigo.trim().toUpperCase()
+
     const { data, error } = await supabase
       .from("codigos_promocionales")
       .select("tipo, descuento_porcentaje, meses_duracion, conekta_plan_id, usos_maximos, usos_actuales, fecha_expiracion")
-      .eq("codigo", codigo.trim().toUpperCase())
+      .eq("codigo", codigoLimpio)
       .eq("activo", true)
       .single()
 
+    if (error || !data) {
+      setLoadingCodigo(false)
+      setErrorCodigo("Código no válido o inactivo.")
+      return
+    }
+
+    if (data.usos_maximos !== null && data.usos_actuales >= data.usos_maximos) {
+      setLoadingCodigo(false)
+      setErrorCodigo("Este código ya alcanzó el límite de usos.")
+      return
+    }
+
+    if (data.fecha_expiracion && new Date(data.fecha_expiracion) < new Date()) {
+      setLoadingCodigo(false)
+      setErrorCodigo("Este código ha expirado.")
+      return
+    }
+
+    // Límite de usos por familia (aplica principalmente a códigos tipo "beta")
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (user) {
+      const { count, error: countError } = await supabase
+        .from("suscripciones")
+        .select("id", { count: "exact", head: true })
+        .eq("familia_id", user.id)
+        .eq("codigo_usado", codigoLimpio)
+
+      if (!countError && data.tipo === "beta" && (count ?? 0) >= LIMITE_USOS_BETA_POR_FAMILIA) {
+        setLoadingCodigo(false)
+        setErrorCodigo("Ya alcanzaste el límite de usos de este código para tu familia.")
+        return
+      }
+    }
+
     setLoadingCodigo(false)
-
-    if (error || !data) { setErrorCodigo("Código no válido o inactivo."); return }
-    if (data.usos_maximos !== null && data.usos_actuales >= data.usos_maximos) { setErrorCodigo("Este código ya alcanzó el límite de usos."); return }
-    if (data.fecha_expiracion && new Date(data.fecha_expiracion) < new Date()) { setErrorCodigo("Este código ha expirado."); return }
-
     setCodigoAplicado(data)
   }
 
@@ -242,7 +276,7 @@ export default function SuscripcionPage() {
           <div style={{ display: "flex", gap: "8px" }}>
             <input
               type="text"
-              placeholder="Ej. BETA2026"
+              placeholder="Código promocional (opcional)"
               value={codigo}
               onChange={e => setCodigo(e.target.value.toUpperCase())}
               style={{ ...inputStyle, flex: 1, width: "auto" }}
