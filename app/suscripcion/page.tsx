@@ -53,6 +53,11 @@ export default function SuscripcionPage() {
     }
   }, [])
 
+  async function handleLogout() {
+    await supabase.auth.signOut()
+    router.push("/")
+  }
+
   async function aplicarCodigo() {
     setErrorCodigo("")
     setCodigoAplicado(null)
@@ -85,7 +90,6 @@ export default function SuscripcionPage() {
       return
     }
 
-    // Límite de usos por familia (aplica principalmente a códigos tipo "beta")
     const { data: { user } } = await supabase.auth.getUser()
 
     if (user) {
@@ -244,6 +248,23 @@ export default function SuscripcionPage() {
         width: "100%",
         boxShadow: "0 4px 24px rgba(0,0,0,0.08)",
       }}>
+        <div style={{ textAlign: "right", marginBottom: "8px" }}>
+          <button
+            onClick={handleLogout}
+            style={{
+              background: "none",
+              border: "none",
+              color: "#94a3b8",
+              fontSize: "12px",
+              cursor: "pointer",
+              fontFamily: "Sora, sans-serif",
+              textDecoration: "underline",
+            }}
+          >
+            Cerrar sesión
+          </button>
+        </div>
+
         <div style={{ textAlign: "center", marginBottom: "32px" }}>
           <div style={{ fontSize: "32px", marginBottom: "8px" }}>💙</div>
           <h1 style={{ fontSize: "22px", fontWeight: 700, color: "#0f172a", margin: 0 }}>
