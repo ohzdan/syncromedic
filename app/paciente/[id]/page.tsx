@@ -4,8 +4,11 @@ import { createClient } from "@/lib/supabase";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 
+type Rol = 'familia' | 'medico' | 'terapeuta' | 'centro_terapias' | 'escuela' | 'admin'
+
 export default function ExpedientePaciente() {
   const [paciente, setPaciente] = useState<any>(null);
+  const [rol, setRol] = useState<Rol>('familia');
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const params = useParams();
@@ -15,6 +18,15 @@ export default function ExpedientePaciente() {
     async function cargarPaciente() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/"); return; }
+
+      const { data: userData } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+
+      setRol((userData?.role || user.user_metadata?.role || 'familia') as Rol);
+
       const { data } = await supabase
         .from("pacientes").select("*").eq("id", params.id).single();
       if (!data) { router.push("/dashboard"); return; }
@@ -38,6 +50,10 @@ export default function ExpedientePaciente() {
       <p className="text-slate-400">Cargando expediente...</p>
     </main>
   );
+
+  const esFamilia = rol === 'familia';
+  const esEscuela = rol === 'escuela';
+  const esProfesionalClinico = !esFamilia && !esEscuela; // medico, terapeuta, centro_terapias, admin
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -75,12 +91,14 @@ export default function ExpedientePaciente() {
               </div>
             )}
           </div>
-          <Link
-            href={`/paciente/${params.id}/scouting?modo=editar`}
-            className="text-slate-400 hover:text-[#1A6BFF] text-xs font-medium transition-colors whitespace-nowrap"
-          >
-            ✏️ Editar perfil
-          </Link>
+          {esFamilia && (
+            <Link
+              href={`/paciente/${params.id}/scouting?modo=editar`}
+              className="text-slate-400 hover:text-[#1A6BFF] text-xs font-medium transition-colors whitespace-nowrap"
+            >
+              ✏️ Editar perfil
+            </Link>
+          )}
         </div>
 
         {paciente.alergias?.length > 0 && (
@@ -98,44 +116,71 @@ export default function ExpedientePaciente() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-          <Link href={`/paciente/${params.id}/equipo`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
-            <p className="text-2xl mb-3">🩺</p>
-            <h2 className="text-slate-900 font-semibold mb-1">Equipo médico</h2>
-            <p className="text-slate-500 text-sm">Doctores, terapeutas y escuela vinculados</p>
-            <p className="text-[#1A6BFF] text-xs font-semibold mt-3">+ Invitar profesional →</p>
-          </Link>
+          {esFamilia && (
+            <Link href={`/paciente/${params.id}/equipo`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">🩺</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Equipo médico</h2>
+              <p className="text-slate-500 text-sm">Doctores, terapeutas y escuela vinculados</p>
+              <p className="text-[#1A6BFF] text-xs font-semibold mt-3">+ Invitar profesional →</p>
+            </Link>
+          )}
 
-          <Link href={`/paciente/${params.id}/notas`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
-            <p className="text-2xl mb-3">📋</p>
-            <h2 className="text-slate-900 font-semibold mb-1">Notas clínicas</h2>
-            <p className="text-slate-500 text-sm">Consultas, sesiones y reportes del equipo</p>
-          </Link>
+          {esFamilia && (
+            <Link href={`/paciente/${params.id}/notas`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">📋</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Notas clínicas</h2>
+              <p className="text-slate-500 text-sm">Consultas, sesiones y reportes del equipo</p>
+            </Link>
+          )}
 
-          <Link href={`/paciente/${params.id}/medicamentos`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
-            <p className="text-2xl mb-3">💊</p>
-            <h2 className="text-slate-900 font-semibold mb-1">Medicamentos</h2>
-            <p className="text-slate-500 text-sm">Medicamentos activos y quién los indicó</p>
-          </Link>
+          {esProfesionalClinico && (
+            <Link href={`/paciente/${params.id}/medicamentos`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">💊</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Medicamentos</h2>
+              <p className="text-slate-500 text-sm">Medicamentos activos (solo lectura)</p>
+            </Link>
+          )}
 
-          <Link href={`/paciente/${params.id}/documentos`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
-            <p className="text-2xl mb-3">📁</p>
-            <h2 className="text-slate-900 font-semibold mb-1">Documentos</h2>
-            <p className="text-slate-500 text-sm">Estudios, análisis y recetas</p>
-          </Link>
+          {esFamilia && (
+            <Link href={`/paciente/${params.id}/medicamentos`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">💊</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Medicamentos</h2>
+              <p className="text-slate-500 text-sm">Medicamentos activos y quién los indicó</p>
+            </Link>
+          )}
 
-          <Link href={`/paciente/${params.id}/timeline`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
-            <p className="text-2xl mb-3">⏱️</p>
-            <h2 className="text-slate-900 font-semibold mb-1">Timeline médico</h2>
-            <p className="text-slate-500 text-sm">Historial cronológico de todos los eventos del expediente</p>
-          </Link>
+          {(esFamilia || esProfesionalClinico) && (
+            <Link href={`/paciente/${params.id}/documentos`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">📁</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Documentos</h2>
+              <p className="text-slate-500 text-sm">Estudios, análisis y recetas</p>
+            </Link>
+          )}
 
-          <Link href={`/paciente/${params.id}/recomendaciones`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
-            <p className="text-2xl mb-3">📝</p>
-            <h2 className="text-slate-900 font-semibold mb-1">Recomendaciones para la escuela</h2>
-            <p className="text-slate-500 text-sm">Indicaciones del equipo médico y terapéutico para el entorno escolar</p>
-          </Link>
+          {(esFamilia || esProfesionalClinico) && (
+            <Link href={`/paciente/${params.id}/timeline`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">⏱️</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Timeline médico</h2>
+              <p className="text-slate-500 text-sm">Historial cronológico de todos los eventos del expediente</p>
+            </Link>
+          )}
+
+          {(esFamilia || esEscuela) && (
+            <Link href={`/paciente/${params.id}/recomendaciones`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">📝</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Recomendaciones para la escuela</h2>
+              <p className="text-slate-500 text-sm">Indicaciones del equipo médico y terapéutico para el entorno escolar</p>
+            </Link>
+          )}
 
         </div>
+
+        {esEscuela && (
+          <p className="text-slate-400 text-xs mt-6 text-center">
+            Como escuela, tu acceso está limitado a las recomendaciones para el entorno escolar.
+          </p>
+        )}
+
       </div>
     </main>
   );

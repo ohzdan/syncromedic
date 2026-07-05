@@ -17,6 +17,8 @@ const FRECUENCIAS = [
   "Otra",
 ];
 
+type Rol = 'familia' | 'medico' | 'terapeuta' | 'centro_terapias' | 'escuela' | 'admin'
+
 type Medicamento = {
   id: string;
   nombre_medicamento: string;
@@ -37,6 +39,7 @@ export default function MedicamentosPage() {
   const supabase = createClient();
 
   const [paciente, setPaciente] = useState<any>(null);
+  const [rol, setRol] = useState<Rol>('familia');
   const [medicamentos, setMedicamentos] = useState<Medicamento[]>([]);
   const [loading, setLoading] = useState(true);
   const [guardando, setGuardando] = useState(false);
@@ -62,6 +65,14 @@ export default function MedicamentosPage() {
   async function cargarDatos() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.push("/"); return; }
+
+    const { data: userData } = await supabase
+      .from('users')
+      .select('role')
+      .eq('id', user.id)
+      .single();
+
+    setRol((userData?.role || user.user_metadata?.role || 'familia') as Rol);
 
     const { data: pac } = await supabase.from("pacientes").select("id, nombre").eq("id", pacienteId).single();
     setPaciente(pac);
@@ -141,6 +152,7 @@ export default function MedicamentosPage() {
     await cargarMedicamentos();
   }
 
+  const esFamilia = rol === 'familia';
   const activos = medicamentos.filter(m => m.activo);
   const historial = medicamentos.filter(m => !m.activo);
 
@@ -170,14 +182,19 @@ export default function MedicamentosPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-slate-800 text-2xl font-bold">Medicamentos</h1>
-            <p className="text-slate-500 text-sm mt-0.5">{paciente?.nombre}</p>
+            <p className="text-slate-500 text-sm mt-0.5">
+              {paciente?.nombre}
+              {!esFamilia && <span className="text-slate-400"> · solo lectura</span>}
+            </p>
           </div>
-          <button
-            onClick={() => { limpiarFormulario(); setModalAbierto(true); }}
-            className="bg-[#1A6BFF] hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
-          >
-            + Agregar
-          </button>
+          {esFamilia && (
+            <button
+              onClick={() => { limpiarFormulario(); setModalAbierto(true); }}
+              className="bg-[#1A6BFF] hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
+            >
+              + Agregar
+            </button>
+          )}
         </div>
 
         <h2 className="text-slate-600 text-xs font-semibold uppercase tracking-wide mb-3">Activos</h2>
@@ -185,9 +202,11 @@ export default function MedicamentosPage() {
           <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center shadow-sm mb-6">
             <div className="text-4xl mb-3">💊</div>
             <p className="text-slate-500 text-sm">No hay medicamentos activos registrados.</p>
-            <button onClick={() => { limpiarFormulario(); setModalAbierto(true); }} className="mt-4 text-[#1A6BFF] text-sm hover:underline">
-              Agregar el primero →
-            </button>
+            {esFamilia && (
+              <button onClick={() => { limpiarFormulario(); setModalAbierto(true); }} className="mt-4 text-[#1A6BFF] text-sm hover:underline">
+                Agregar el primero →
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-3 mb-6">
@@ -204,12 +223,14 @@ export default function MedicamentosPage() {
                     <p className="text-slate-400 text-xs">Desde: {formatFecha(med.fecha_inicio)}{med.fecha_fin ? ` · Hasta: ${formatFecha(med.fecha_fin)}` : ""}</p>
                     {med.notas && <p className="text-slate-500 text-xs mt-2 italic">"{med.notas}"</p>}
                   </div>
-                  <button
-                    onClick={() => desactivarMedicamento(med.id, med.nombre_medicamento)}
-                    className="text-slate-400 hover:text-red-500 text-xs px-3 py-1.5 border border-slate-200 hover:border-red-200 rounded-lg transition-colors flex-shrink-0"
-                  >
-                    Suspender
-                  </button>
+                  {esFamilia && (
+                    <button
+                      onClick={() => desactivarMedicamento(med.id, med.nombre_medicamento)}
+                      className="text-slate-400 hover:text-red-500 text-xs px-3 py-1.5 border border-slate-200 hover:border-red-200 rounded-lg transition-colors flex-shrink-0"
+                    >
+                      Suspender
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -248,7 +269,7 @@ export default function MedicamentosPage() {
         )}
       </div>
 
-      {modalAbierto && (
+      {modalAbierto && esFamilia && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-slate-800 text-lg font-bold mb-5">Agregar medicamento</h2>
