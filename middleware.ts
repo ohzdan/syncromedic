@@ -6,7 +6,7 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   const publicPaths = ["/registro", "/login", "/consentimiento", "/invitacion", "/suscripcion", "/api"]
-  const isPublic = publicPaths.some(path => pathname.startsWith(path))
+  const isPublic = pathname === "/" || publicPaths.some(path => pathname.startsWith(path))
   if (isPublic) return NextResponse.next()
 
   let response = NextResponse.next()
