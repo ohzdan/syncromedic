@@ -42,8 +42,34 @@ function severidad(minutos: number): 'gris' | 'moderado' | 'severo' {
   return 'severo'
 }
 
+function fechaMasDias(fecha: string, dias: number) {
+  const d = new Date(fecha + 'T12:00:00')
+  d.setDate(d.getDate() + dias)
+  return d.toISOString().slice(0, 10)
+}
+
 function hoyISO() {
   return new Date().toISOString().slice(0, 10)
+}
+
+function horaHHMM(iso: string) {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/**
+ * Construye un timestamp ISO a partir de una fecha base y una hora (HH:MM).
+ * Si se da una hora de referencia (ej. la hora en que se durmió) y la hora
+ * nueva es "menor" en el reloj, asumimos que cruzó la medianoche y sumamos un día.
+ */
+function construirFechaHora(fechaBase: string, horaHHMM_: string, horaReferencia?: string) {
+  let fecha = fechaBase
+  if (horaReferencia && horaHHMM_ < horaReferencia) {
+    const d = new Date(fechaBase + 'T12:00:00')
+    d.setDate(d.getDate() + 1)
+    fecha = d.toISOString().slice(0, 10)
+  }
+  return `${fecha}T${horaHHMM_}:00`
 }
 
 export default function BitacoraSuenoPage() {
@@ -181,11 +207,18 @@ export default function BitacoraSuenoPage() {
     if (!horaSimple || !modalSimple) return
     setGuardandoSimple(true)
     const { data: { user } } = await supabase.auth.getUser()
+
+    // noche_fecha = día en que despierta. "Dormir" ocurrió la noche ANTERIOR a esa fecha.
+    // "Despertar final" ocurre el mismo día seleccionado.
+    const horaInicioFinal = modalSimple === 'dormir'
+      ? `${fechaMasDias(fechaSeleccionada, -1)}T${horaSimple}:00`
+      : `${fechaSeleccionada}T${horaSimple}:00`
+
     await supabase.from('bitacora_registros').insert({
       paciente_id: pacienteId,
       tipo: modalSimple === 'dormir' ? 'sueno_inicio' : 'sueno_fin',
       noche_fecha: fechaSeleccionada,
-      hora_inicio: `${fechaSeleccionada}T${horaSimple}:00`,
+      hora_inicio: horaInicioFinal,
       registrado_por: user?.id,
     })
     setGuardandoSimple(false)
@@ -195,14 +228,15 @@ export default function BitacoraSuenoPage() {
 
   async function guardarDespertar() {
     setGuardando(true)
-    const horaInicioIso = `${fechaSeleccionada}T${horaDespierto}:00`
-    let fechaFin = fechaSeleccionada
-    if (horaVolvio < horaDespierto) {
-      const d = new Date(fechaSeleccionada + 'T12:00:00')
-      d.setDate(d.getDate() + 1)
-      fechaFin = d.toISOString().slice(0, 10)
-    }
-    const horaFinIso = `${fechaFin}T${horaVolvio}:00`
+
+    // La base del despertar es la noche anterior (cuando se durmió).
+    // Si la hora del despertar es "menor" que la de dormir, ya cruzó a fechaSeleccionada (el día en que despierta).
+    const horaDormida = inicio ? horaHHMM(inicio.hora_inicio) : undefined
+    const horaInicioIso = construirFechaHora(fechaMasDias(fechaSeleccionada, -1), horaDespierto, horaDormida)
+
+    // La hora en que volvió a dormir es relativa al propio despertar (puede cruzar otra medianoche)
+    const fechaBaseDespertar = horaInicioIso.slice(0, 10)
+    const horaFinIso = construirFechaHora(fechaBaseDespertar, horaVolvio, horaDespierto)
 
     const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('bitacora_registros').insert({
@@ -258,7 +292,9 @@ export default function BitacoraSuenoPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => cambiarDia(-1)} className="w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center text-sm">‹</button>
-                <span className="text-xs font-semibold text-slate-600 w-20 text-center">
+                <span className="text-xs font-semibold text-slate-600 w-28 text-center">
+                  {new Date(fechaMasDias(fechaSeleccionada, -1) + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                  {' → '}
                   {new Date(fechaSeleccionada + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
                 </span>
                 <button onClick={() => cambiarDia(1)} disabled={fechaSeleccionada >= hoyISO()} className="w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center text-sm disabled:opacity-30">›</button>
@@ -438,7 +474,9 @@ export default function BitacoraSuenoPage() {
             <h2 className="text-slate-800 text-lg font-bold mb-1">
               {modalSimple === 'dormir' ? 'Registrar que se durmió' : 'Registrar despertar final'}
             </h2>
-            <p className="text-slate-400 text-xs mb-5">{paciente?.nombre} · {new Date(fechaSeleccionada + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</p>
+            <p className="text-slate-400 text-xs mb-5">
+              {paciente?.nombre} · {new Date((modalSimple === 'dormir' ? fechaMasDias(fechaSeleccionada, -1) : fechaSeleccionada) + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+            </p>
 
             <div className="mb-6">
               <label className="text-slate-500 text-xs mb-1 block">
