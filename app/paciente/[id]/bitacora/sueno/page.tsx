@@ -62,6 +62,10 @@ export default function BitacoraSuenoPage() {
   const [historial, setHistorial] = useState<{ fecha: string, horas: number, maxSeveridad: 'gris' | 'moderado' | 'severo' | null }[]>([])
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
 
+  const [modalSimple, setModalSimple] = useState<null | 'dormir' | 'fin'>(null)
+  const [horaSimple, setHoraSimple] = useState('20:40')
+  const [guardandoSimple, setGuardandoSimple] = useState(false)
+
   const [modalAbierto, setModalAbierto] = useState(false)
   const [horaDespierto, setHoraDespierto] = useState('03:00')
   const [horaVolvio, setHoraVolvio] = useState('03:10')
@@ -163,31 +167,29 @@ export default function BitacoraSuenoPage() {
     setFechaSeleccionada(d.toISOString().slice(0, 10))
   }
 
-  async function registrarSeDormio() {
-    const hora = prompt('¿A qué hora se durmió? (formato 24h, ej. 20:40)')
-    if (!hora) return
-    const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('bitacora_registros').insert({
-      paciente_id: pacienteId,
-      tipo: 'sueno_inicio',
-      noche_fecha: fechaSeleccionada,
-      hora_inicio: `${fechaSeleccionada}T${hora}:00`,
-      registrado_por: user?.id,
-    })
-    await cargarNoche(fechaSeleccionada)
+  function abrirModalDormir() {
+    setHoraSimple('20:40')
+    setModalSimple('dormir')
   }
 
-  async function registrarDespertoFinal() {
-    const hora = prompt('¿A qué hora despertó definitivamente? (formato 24h, ej. 06:50)')
-    if (!hora) return
+  function abrirModalFin() {
+    setHoraSimple('06:50')
+    setModalSimple('fin')
+  }
+
+  async function guardarSimple() {
+    if (!horaSimple || !modalSimple) return
+    setGuardandoSimple(true)
     const { data: { user } } = await supabase.auth.getUser()
     await supabase.from('bitacora_registros').insert({
       paciente_id: pacienteId,
-      tipo: 'sueno_fin',
+      tipo: modalSimple === 'dormir' ? 'sueno_inicio' : 'sueno_fin',
       noche_fecha: fechaSeleccionada,
-      hora_inicio: `${fechaSeleccionada}T${hora}:00`,
+      hora_inicio: `${fechaSeleccionada}T${horaSimple}:00`,
       registrado_por: user?.id,
     })
+    setGuardandoSimple(false)
+    setModalSimple(null)
     await cargarNoche(fechaSeleccionada)
   }
 
@@ -280,7 +282,7 @@ export default function BitacoraSuenoPage() {
                   </p>
                   {esFamilia && (
                     <button
-                      onClick={!inicio ? registrarSeDormio : registrarDespertoFinal}
+                      onClick={!inicio ? abrirModalDormir : abrirModalFin}
                       className="bg-[#4C4FE0] text-white text-sm font-bold px-4 py-2.5 rounded-xl"
                     >
                       {!inicio ? '+ Registrar que se durmió' : '+ Registrar despertar final'}
@@ -425,6 +427,36 @@ export default function BitacoraSuenoPage() {
               <button onClick={() => setModalAbierto(false)} className="flex-1 bg-slate-100 text-slate-600 text-sm font-bold py-3 rounded-xl">Cancelar</button>
               <button onClick={guardarDespertar} disabled={guardando} className="flex-1 bg-[#4C4FE0] text-white text-sm font-bold py-3 rounded-xl disabled:opacity-50">
                 {guardando ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {modalSimple && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h2 className="text-slate-800 text-lg font-bold mb-1">
+              {modalSimple === 'dormir' ? 'Registrar que se durmió' : 'Registrar despertar final'}
+            </h2>
+            <p className="text-slate-400 text-xs mb-5">{paciente?.nombre} · {new Date(fechaSeleccionada + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</p>
+
+            <div className="mb-6">
+              <label className="text-slate-500 text-xs mb-1 block">
+                {modalSimple === 'dormir' ? 'Se durmió a las' : 'Despertó definitivamente a las'}
+              </label>
+              <input
+                type="time"
+                value={horaSimple}
+                onChange={e => setHoraSimple(e.target.value)}
+                autoFocus
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#4C4FE0]"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button onClick={() => setModalSimple(null)} className="flex-1 bg-slate-100 text-slate-600 text-sm font-bold py-3 rounded-xl">Cancelar</button>
+              <button onClick={guardarSimple} disabled={guardandoSimple} className="flex-1 bg-[#4C4FE0] text-white text-sm font-bold py-3 rounded-xl disabled:opacity-50">
+                {guardandoSimple ? 'Guardando...' : 'Guardar'}
               </button>
             </div>
           </div>
