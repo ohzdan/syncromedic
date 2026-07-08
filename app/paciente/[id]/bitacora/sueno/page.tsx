@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
@@ -89,6 +89,7 @@ export default function BitacoraSuenoPage() {
   const [cargandoHistorial, setCargandoHistorial] = useState(false)
 
   const [modalSimple, setModalSimple] = useState<null | 'dormir' | 'fin'>(null)
+  const fechaInputRef = useRef<HTMLInputElement>(null)
   const [horaSimple, setHoraSimple] = useState('20:40')
   const [guardandoSimple, setGuardandoSimple] = useState(false)
 
@@ -292,14 +293,41 @@ export default function BitacoraSuenoPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={() => cambiarDia(-1)} className="w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center text-sm">‹</button>
-                <span className="text-xs font-semibold text-slate-600 w-28 text-center">
+
+                <button
+                  onClick={() => {
+                    const el = fechaInputRef.current as any
+                    if (el?.showPicker) el.showPicker()
+                    else el?.focus()
+                  }}
+                  className="text-xs font-semibold text-slate-600 px-2 py-1 rounded-lg hover:bg-slate-100 flex items-center gap-1 relative"
+                >
+                  📅
                   {new Date(fechaMasDias(fechaSeleccionada, -1) + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
                   {' → '}
                   {new Date(fechaSeleccionada + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                </span>
+                  <input
+                    ref={fechaInputRef}
+                    type="date"
+                    value={fechaSeleccionada}
+                    max={hoyISO()}
+                    onChange={e => e.target.value && setFechaSeleccionada(e.target.value)}
+                    className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+                  />
+                </button>
+
                 <button onClick={() => cambiarDia(1)} disabled={fechaSeleccionada >= hoyISO()} className="w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-400 hover:text-slate-700 flex items-center justify-center text-sm disabled:opacity-30">›</button>
               </div>
             </div>
+
+            {fechaSeleccionada !== hoyISO() && (
+              <button
+                onClick={() => setFechaSeleccionada(hoyISO())}
+                className="text-xs font-semibold text-[#4C4FE0] mb-4 -mt-2 block"
+              >
+                ← Volver a hoy
+              </button>
+            )}
 
             <div className="bg-white border border-slate-200 rounded-2xl p-5 mb-4 shadow-sm">
               <div className="flex items-center justify-between mb-3">
