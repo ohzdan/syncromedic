@@ -56,6 +56,7 @@ export default function BitacoraEvacuacionesPage() {
   const [diasSinRegistro, setDiasSinRegistro] = useState(0)
 
   const [modalAbierto, setModalAbierto] = useState(false)
+  const [fechaModal, setFechaModal] = useState(new Date())
   const [hora, setHora] = useState('')
   const [consistencia, setConsistencia] = useState<Consistencia>('normal')
   const [nota, setNota] = useState('')
@@ -164,6 +165,7 @@ export default function BitacoraEvacuacionesPage() {
   function abrirModalNuevo() {
     const ahora = new Date()
     setHora(`${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`)
+    setFechaModal(fechaSeleccionada)
     setConsistencia('normal')
     setNota('')
     setFoto(null)
@@ -190,13 +192,13 @@ export default function BitacoraEvacuacionesPage() {
     const { data: { user } } = await supabase.auth.getUser()
 
     const [h, m] = hora.split(':').map(Number)
-    const fechaHora = new Date(fechaSeleccionada)
+    const fechaHora = new Date(fechaModal)
     fechaHora.setHours(h, m, 0, 0)
 
     let fotoPath: string | null = null
     if (foto) {
       const ext = foto.name.split('.').pop()
-      fotoPath = `bitacora/${pacienteId}/${Date.now()}.${ext}`
+      fotoPath = `${pacienteId}/bitacora/${Date.now()}.${ext}`
       const { error: uploadError } = await supabase.storage
         .from('documentos')
         .upload(fotoPath, foto)
@@ -224,7 +226,8 @@ export default function BitacoraEvacuacionesPage() {
     }
 
     setModalAbierto(false)
-    await cargarRegistrosDelDia(fechaSeleccionada)
+    setFechaSeleccionada(fechaModal)
+    await cargarRegistrosDelDia(fechaModal)
     await calcularDiasSinRegistro()
     setGuardando(false)
   }
@@ -369,6 +372,15 @@ export default function BitacoraEvacuacionesPage() {
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
           <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-6">
             <h3 className="font-bold text-lg mb-4">Nuevo registro</h3>
+
+            <label className="block text-sm text-gray-500 mb-1">Fecha</label>
+            <input
+              type="date"
+              value={toDateInputValue(fechaModal)}
+              max={toDateInputValue(new Date())}
+              onChange={(e) => setFechaModal(new Date(e.target.value + 'T12:00:00'))}
+              className="w-full border rounded-lg px-3 py-2 mb-4"
+            />
 
             <label className="block text-sm text-gray-500 mb-1">Hora</label>
             <input
