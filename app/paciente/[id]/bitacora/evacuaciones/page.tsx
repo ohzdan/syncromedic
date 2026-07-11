@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
@@ -23,22 +23,52 @@ const CONSISTENCIA_LABELS: Record<Consistencia, string> = {
   diarrea: 'Diarrea',
 }
 
+// Colores del sistema de diseño de SyncroMedic + acentos del mockup de bitácora
+const AZUL = '#1A6BFF'
+const VERDE = '#00C97A'
+const VERDE_SUAVE = '#E6FBF2'
+const AMBAR = '#F59E0B'
+const AMBAR_SUAVE = '#FEF3E2'
+const ROJO = '#EF4444'
+const ROJO_SUAVE = '#FEF2F2'
+const GRIS = '#64748B'
+const GRIS_CLARO = '#94A3B8'
+const BORDE = '#E2E8F0'
+
 const CONSISTENCIA_COLORS: Record<Consistencia, string> = {
-  normal: '#00C97A',
-  blanda: '#1A6BFF',
-  dura: '#F59E0B',
-  diarrea: '#EF4444',
+  normal: VERDE,
+  blanda: AMBAR,
+  dura: AMBAR,
+  diarrea: ROJO,
 }
 
-function formatFechaCorta(fecha: Date) {
-  return fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+const CONSISTENCIA_SUAVE: Record<Consistencia, string> = {
+  normal: VERDE_SUAVE,
+  blanda: AMBAR_SUAVE,
+  dura: AMBAR_SUAVE,
+  diarrea: ROJO_SUAVE,
 }
+
+const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
 function toDateInputValue(fecha: Date) {
   const y = fecha.getFullYear()
   const m = String(fecha.getMonth() + 1).padStart(2, '0')
   const d = String(fecha.getDate()).padStart(2, '0')
   return `${y}-${m}-${d}`
+}
+
+function esMismoDia(a: Date, b: Date) {
+  return a.toDateString() === b.toDateString()
+}
+
+function lunesDeLaSemana(fecha: Date) {
+  const d = new Date(fecha)
+  const dia = d.getDay() // 0 = domingo
+  const diff = dia === 0 ? -6 : 1 - dia
+  d.setDate(d.getDate() + diff)
+  d.setHours(0, 0, 0, 0)
+  return d
 }
 
 export default function BitacoraEvacuacionesPage() {
@@ -51,9 +81,12 @@ export default function BitacoraEvacuacionesPage() {
   const [paciente, setPaciente] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
+  const [vista, setVista] = useState<'hoy' | 'historial'>('hoy')
+
   const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date())
+  const [weekOffset, setWeekOffset] = useState(0)
   const [registros, setRegistros] = useState<Registro[]>([])
-  const [diasSinRegistro, setDiasSinRegistro] = useState(0)
+  const [registros30, setRegistros30] = useState<{ hora_inicio: string; consistencia: Consistencia | null }[]>([])
 
   const [modalAbierto, setModalAbierto] = useState(false)
   const [fechaModal, setFechaModal] = useState(new Date())
@@ -70,6 +103,7 @@ export default function BitacoraEvacuacionesPage() {
 
   const fechaInputRef = useRef<HTMLInputElement>(null)
   const esFamilia = rol === 'familia'
+  const hoy = new Date()
 
   useEffect(() => {
     async function cargar() {
@@ -85,7 +119,7 @@ export default function BitacoraEvacuacionesPage() {
       setPaciente(pacienteData)
 
       await cargarRegistrosDelDia(fechaSeleccionada)
-      await calcularDiasSinRegistro()
+      await cargarRegistros30()
       setLoading(false)
     }
     cargar()
@@ -115,50 +149,87 @@ export default function BitacoraEvacuacionesPage() {
     setRegistros(data ?? [])
   }
 
-  async function calcularDiasSinRegistro() {
+  async function cargarRegistros30() {
     const desde = new Date()
-    desde.setDate(desde.getDate() - 14)
+    desde.setDate(desde.getDate() - 29)
     desde.setHours(0, 0, 0, 0)
 
     const { data } = await supabase
       .from('bitacora_registros')
-      .select('hora_inicio')
+      .select('hora_inicio, consistencia')
       .eq('paciente_id', pacienteId)
       .eq('tipo', 'evacuacion')
       .gte('hora_inicio', desde.toISOString())
-      .order('hora_inicio', { ascending: false })
+      .order('hora_inicio', { ascending: true })
 
-    const diasConRegistro = new Set(
-      (data ?? []).map((r: { hora_inicio: string }) => new Date(r.hora_inicio).toDateString())
-    )
-
-    let racha = 0
-    const cursor = new Date()
-    cursor.setHours(0, 0, 0, 0)
-    const hoyClave = new Date().toDateString()
-    let vueltas = 0
-    while (vueltas < 14) {
-      const clave = cursor.toDateString()
-      if (clave === hoyClave) {
-        cursor.setDate(cursor.getDate() - 1)
-        vueltas++
-        continue
-      }
-      if (diasConRegistro.has(clave)) break
-      racha++
-      cursor.setDate(cursor.getDate() - 1)
-      vueltas++
-    }
-    setDiasSinRegistro(racha)
+    setRegistros30(data ?? [])
   }
 
-  function cambiarDia(delta: number) {
-    const nueva = new Date(fechaSeleccionada)
-    nueva.setDate(nueva.getDate() + delta)
-    setFechaSeleccionada(nueva)
+  // --- Agregados para Historial (últimos 30 días) ---
+  const diasAgregados = useMemo(() => {
+    const dias: { fecha: Date; veces: number; tipo: Consistencia | null }[] = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      d.setHours(0, 0, 0, 0)
+      dias.push({ fecha: d, veces: 0, tipo: null })
+    }
+    const PRIORIDAD: Consistencia[] = ['diarrea', 'blanda', 'dura', 'normal']
+
+    registros30.forEach(r => {
+      const fechaR = new Date(r.hora_inicio)
+      fechaR.setHours(0, 0, 0, 0)
+      const dia = dias.find(d => esMismoDia(d.fecha, fechaR))
+      if (!dia) return
+      dia.veces++
+      if (r.consistencia) {
+        if (!dia.tipo || PRIORIDAD.indexOf(r.consistencia) < PRIORIDAD.indexOf(dia.tipo)) {
+          dia.tipo = r.consistencia
+        }
+      }
+    })
+    return dias
+  }, [registros30])
+
+  const statsHistorial = useMemo(() => {
+    const totalVeces = diasAgregados.reduce((acc, d) => acc + d.veces, 0)
+    const diasSinEvacuar = diasAgregados.filter(d => d.veces === 0).length
+    const diasConDiarrea = diasAgregados.filter(d => d.tipo === 'diarrea').length
+    const promedio = (totalVeces / 30).toFixed(1)
+    return { promedio, diasSinEvacuar, diasConDiarrea }
+  }, [diasAgregados])
+
+  const diasSinRegistroSeguidos = useMemo(() => {
+    let racha = 0
+    for (let i = diasAgregados.length - 1; i >= 0; i--) {
+      const dia = diasAgregados[i]
+      const esHoyDia = esMismoDia(dia.fecha, new Date())
+      if (esHoyDia) continue // no contamos el día de hoy si aún no termina
+      if (dia.veces > 0) break
+      racha++
+    }
+    return racha
+  }, [diasAgregados])
+
+  // --- Pills de la semana ---
+  const diasSemana = useMemo(() => {
+    const lunes = lunesDeLaSemana(hoy)
+    lunes.setDate(lunes.getDate() + weekOffset * 7)
+    return Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(lunes)
+      d.setDate(d.getDate() + i)
+      return d
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOffset])
+
+  function seleccionarDia(d: Date) {
+    if (d > hoy && !esMismoDia(d, hoy)) return
+    setFechaSeleccionada(d)
   }
 
   function irAHoy() {
+    setWeekOffset(0)
     setFechaSeleccionada(new Date())
   }
 
@@ -228,7 +299,7 @@ export default function BitacoraEvacuacionesPage() {
     setModalAbierto(false)
     setFechaSeleccionada(fechaModal)
     await cargarRegistrosDelDia(fechaModal)
-    await calcularDiasSinRegistro()
+    await cargarRegistros30()
     setGuardando(false)
   }
 
@@ -239,7 +310,7 @@ export default function BitacoraEvacuacionesPage() {
     }
     await supabase.from('bitacora_registros').delete().eq('id', registro.id)
     await cargarRegistrosDelDia(fechaSeleccionada)
-    await calcularDiasSinRegistro()
+    await cargarRegistros30()
   }
 
   async function abrirFoto(registro: Registro) {
@@ -254,12 +325,12 @@ export default function BitacoraEvacuacionesPage() {
   }
 
   function formatHora(iso: string) {
-    return new Date(iso).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+    return new Date(iso).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })
   }
 
   if (loading) {
     return (
-      <main className="min-h-screen bg-[#F7F9FC] flex items-center justify-center">
+      <main className="min-h-screen flex items-center justify-center" style={{ background: '#F8FAFC' }}>
         <p className="text-gray-400">Cargando...</p>
       </main>
     )
@@ -267,122 +338,295 @@ export default function BitacoraEvacuacionesPage() {
 
   const conFoto = registros.filter(r => r.foto_url)
   const sinFoto = registros.filter(r => !r.foto_url)
-  const esHoy = fechaSeleccionada.toDateString() === new Date().toDateString()
+  const esHoy = esMismoDia(fechaSeleccionada, hoy)
+  const maxVeces = Math.max(3, ...diasAgregados.map(d => d.veces))
 
   return (
-    <main className="min-h-screen bg-[#F7F9FC] pb-24">
-      <div className="max-w-2xl mx-auto px-4 pt-6">
-        <Link href={`/paciente/${pacienteId}`} className="text-sm text-gray-500 hover:text-[#1A6BFF]">
-          ← Volver al expediente
-        </Link>
+    <main className="min-h-screen pb-10" style={{ background: '#F8FAFC', fontFamily: "'DM Sans', sans-serif" }}>
+      <div className="max-w-md mx-auto px-4 pt-6">
 
-        <h1 className="text-2xl font-bold mt-2" style={{ fontFamily: 'Sora, sans-serif' }}>
-          Evacuaciones
-        </h1>
-        <p className="text-gray-500 text-sm mb-4">{paciente?.nombre}</p>
-
-        {diasSinRegistro >= 3 && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-4 text-sm">
-            ⚠️ {diasSinRegistro} días sin registro de evacuaciones. Si esto no es normal para {paciente?.nombre}, consideren consultar al médico.
-          </div>
-        )}
-
-        {/* Navegador de fecha */}
-        <div className="flex items-center justify-between bg-white rounded-xl px-4 py-3 mb-4 shadow-sm">
-          <button onClick={() => cambiarDia(-1)} className="text-gray-400 hover:text-[#1A6BFF] px-2">‹</button>
+        {/* Nav */}
+        <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => fechaInputRef.current?.showPicker?.() ?? fechaInputRef.current?.click()}
-              className="font-medium text-gray-800"
+            <div
+              className="w-[26px] h-[26px] rounded-lg flex items-center justify-center text-white text-xs font-extrabold"
+              style={{ background: AZUL, fontFamily: "'Sora', sans-serif" }}
             >
-              {esHoy ? 'Hoy' : formatFechaCorta(fechaSeleccionada)}
-            </button>
-            <input
-              ref={fechaInputRef}
-              type="date"
-              className="sr-only"
-              value={toDateInputValue(fechaSeleccionada)}
-              onChange={(e) => setFechaSeleccionada(new Date(e.target.value + 'T12:00:00'))}
-            />
-            {!esHoy && (
-              <button onClick={irAHoy} className="text-xs text-[#1A6BFF] underline">Volver a hoy</button>
-            )}
-          </div>
-          <button onClick={() => cambiarDia(1)} className="text-gray-400 hover:text-[#1A6BFF] px-2">›</button>
-        </div>
-
-        {/* Galería con foto */}
-        {conFoto.length > 0 && (
-          <div className="mb-4">
-            <h2 className="text-sm font-medium text-gray-500 mb-2">Con foto</h2>
-            <div className="grid grid-cols-3 gap-2">
-              {conFoto.map(r => (
-                <RegistroFotoThumb key={r.id} registro={r} supabase={supabase} onClick={() => abrirFoto(r)} />
-              ))}
+              S
+            </div>
+            <div className="font-bold text-base" style={{ fontFamily: "'Sora', sans-serif" }}>
+              Syncro<span style={{ color: AZUL }}>Medic</span>
             </div>
           </div>
-        )}
+          <Link href={`/paciente/${pacienteId}`} className="text-[13px]" style={{ color: GRIS }}>
+            ← Volver al expediente
+          </Link>
+        </div>
 
-        {/* Lista sin foto */}
-        {sinFoto.length > 0 && (
-          <div className="mb-4">
-            <h2 className="text-sm font-medium text-gray-500 mb-2">Sin foto</h2>
-            <div className="space-y-2">
-              {sinFoto.map(r => (
-                <div key={r.id} className="bg-white rounded-xl px-4 py-3 shadow-sm flex items-center justify-between">
-                  <div>
-                    <span className="font-medium">{formatHora(r.hora_inicio)}</span>
+        {/* Selector de vista */}
+        <div className="flex rounded-xl p-[3px] mb-5" style={{ background: '#F1F5F9' }}>
+          <button
+            onClick={() => setVista('hoy')}
+            className="flex-1 text-center text-[12.5px] font-bold py-2.5 rounded-lg"
+            style={vista === 'hoy' ? { background: 'white', color: VERDE, boxShadow: '0 1px 3px rgba(15,23,42,0.08)' } : { color: GRIS }}
+          >
+            Hoy
+          </button>
+          <button
+            onClick={() => setVista('historial')}
+            className="flex-1 text-center text-[12.5px] font-bold py-2.5 rounded-lg"
+            style={vista === 'historial' ? { background: 'white', color: VERDE, boxShadow: '0 1px 3px rgba(15,23,42,0.08)' } : { color: GRIS }}
+          >
+            Historial
+          </button>
+        </div>
+
+        {vista === 'hoy' ? (
+          <>
+            {/* Encabezado */}
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-[38px] h-[38px] rounded-xl flex items-center justify-center text-lg" style={{ background: VERDE_SUAVE }}>
+                💧
+              </div>
+              <div>
+                <h1 className="text-[21px] font-bold" style={{ fontFamily: "'Sora', sans-serif" }}>Evacuaciones</h1>
+                <p className="text-[13px]" style={{ color: GRIS }}>{paciente?.nombre} · registro diario</p>
+              </div>
+            </div>
+
+            {diasSinRegistroSeguidos >= 3 && (
+              <div className="rounded-xl px-4 py-3 mb-4 text-sm" style={{ background: ROJO_SUAVE, color: '#B91C1C', border: `1px solid #FCA5A5` }}>
+                ⚠️ {diasSinRegistroSeguidos} días sin registro de evacuaciones. Si esto no es normal para {paciente?.nombre}, consideren consultar al médico.
+              </div>
+            )}
+
+            {/* Pills de días */}
+            <div className="flex items-center gap-1 mb-2">
+              <button onClick={() => setWeekOffset(w => w - 1)} className="px-1 text-lg" style={{ color: GRIS_CLARO }}>‹</button>
+              <div className="flex gap-2 overflow-x-auto flex-1 pb-1">
+                {diasSemana.map((d, i) => {
+                  const activo = esMismoDia(d, fechaSeleccionada)
+                  const futuro = d > hoy && !esMismoDia(d, hoy)
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => seleccionarDia(d)}
+                      disabled={futuro}
+                      className="flex-shrink-0 w-[46px] rounded-2xl text-center py-2"
+                      style={{
+                        background: activo ? VERDE : 'white',
+                        border: `1.5px solid ${activo ? VERDE : BORDE}`,
+                        opacity: futuro ? 0.4 : 1,
+                      }}
+                    >
+                      <div className="text-[9px] font-semibold uppercase" style={{ color: activo ? 'white' : GRIS_CLARO, letterSpacing: '0.04em' }}>
+                        {DIAS_SEMANA[i]}
+                      </div>
+                      <div className="text-[15px] font-bold mt-0.5" style={{ color: activo ? 'white' : '#0F172A', fontFamily: "'Sora', sans-serif" }}>
+                        {d.getDate()}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+              <button onClick={() => setWeekOffset(w => w + 1)} className="px-1 text-lg" style={{ color: GRIS_CLARO }}>›</button>
+              <button
+                onClick={() => fechaInputRef.current?.showPicker?.() ?? fechaInputRef.current?.click()}
+                className="px-1.5 text-base"
+                style={{ color: GRIS_CLARO }}
+                title="Elegir fecha específica"
+              >
+                📅
+              </button>
+              <input
+                ref={fechaInputRef}
+                type="date"
+                className="sr-only"
+                value={toDateInputValue(fechaSeleccionada)}
+                max={toDateInputValue(hoy)}
+                onChange={(e) => {
+                  const d = new Date(e.target.value + 'T12:00:00')
+                  setFechaSeleccionada(d)
+                  setWeekOffset(Math.round((lunesDeLaSemana(d).getTime() - lunesDeLaSemana(hoy).getTime()) / (7 * 86400000)))
+                }}
+              />
+            </div>
+            {!esHoy && (
+              <button onClick={irAHoy} className="text-xs underline mb-4" style={{ color: AZUL }}>Volver a hoy</button>
+            )}
+            {esHoy && <div className="mb-4" />}
+
+            {/* Galería con foto */}
+            {conFoto.length > 0 && (
+              <div className="mb-5">
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-[11px] font-bold uppercase" style={{ color: GRIS_CLARO, letterSpacing: '0.06em' }}>
+                    Fotos · {esHoy ? 'Hoy' : DIAS_SEMANA[(fechaSeleccionada.getDay() + 6) % 7] + ' ' + fechaSeleccionada.getDate()}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {conFoto.map(r => (
+                    <RegistroFotoThumb
+                      key={r.id}
+                      registro={r}
+                      supabase={supabase}
+                      onClick={() => abrirFoto(r)}
+                      formatHora={formatHora}
+                    />
+                  ))}
+                  {esFamilia && (
+                    <button
+                      onClick={abrirModalNuevo}
+                      className="aspect-square rounded-xl flex flex-col items-center justify-center gap-1"
+                      style={{ background: 'white', border: `1.5px dashed #CBD5E1`, color: GRIS_CLARO }}
+                    >
+                      <span className="text-xl">📷</span>
+                      <p className="text-[9.5px] font-semibold text-center px-1">Agregar foto</p>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Lista completa */}
+            <div className="mb-2">
+              <span className="text-[11px] font-bold uppercase" style={{ color: GRIS_CLARO, letterSpacing: '0.06em' }}>
+                Todos los registros
+              </span>
+            </div>
+
+            {registros.length === 0 ? (
+              <div className="rounded-2xl px-4 py-8 text-center" style={{ background: 'white', border: `1px solid ${BORDE}`, color: GRIS_CLARO }}>
+                Sin registros este día.
+              </div>
+            ) : (
+              <div className="rounded-2xl px-[18px] pt-[18px] pb-2" style={{ background: 'white', border: `1px solid ${BORDE}`, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+                {registros.map((r, i) => (
+                  <div
+                    key={r.id}
+                    className="flex items-center gap-2.5 py-3 text-[13px]"
+                    style={i > 0 ? { borderTop: '1px solid #F1F5F9' } : {}}
+                  >
+                    <div className="font-bold text-[12.5px] w-[54px] flex-shrink-0" style={{ fontFamily: "'Sora', sans-serif" }}>
+                      {formatHora(r.hora_inicio)}
+                    </div>
+                    {r.foto_url && <span className="text-[13px]" style={{ color: GRIS_CLARO }}>📷</span>}
+                    <div className="flex-1" style={{ color: GRIS }}>{r.nota || '—'}</div>
                     {r.consistencia && (
                       <span
-                        className="ml-2 text-xs px-2 py-0.5 rounded-full text-white"
-                        style={{ backgroundColor: CONSISTENCIA_COLORS[r.consistencia] }}
+                        className="text-[10.5px] font-bold px-2.5 py-1 rounded-full flex-shrink-0"
+                        style={{ background: CONSISTENCIA_SUAVE[r.consistencia], color: CONSISTENCIA_COLORS[r.consistencia] }}
                       >
                         {CONSISTENCIA_LABELS[r.consistencia]}
                       </span>
                     )}
-                    {r.nota && <p className="text-sm text-gray-500 mt-1">{r.nota}</p>}
+                    {esFamilia && (
+                      <button onClick={() => eliminarRegistro(r)} className="text-sm flex-shrink-0" style={{ color: '#CBD5E1' }}>✕</button>
+                    )}
                   </div>
-                  {esFamilia && (
-                    <button onClick={() => eliminarRegistro(r)} className="text-gray-300 hover:text-red-500 text-sm">✕</button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+                ))}
+              </div>
+            )}
 
-        {registros.length === 0 && (
-          <div className="bg-white rounded-xl px-4 py-8 text-center text-gray-400 shadow-sm">
-            Sin registros este día.
-          </div>
+            {esFamilia && (
+              <button
+                onClick={abrirModalNuevo}
+                className="w-full text-white font-bold text-sm py-3.5 rounded-2xl mt-5"
+                style={{ background: VERDE }}
+              >
+                + Agregar registro (con o sin foto)
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Historial */}
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-[38px] h-[38px] rounded-xl flex items-center justify-center text-lg" style={{ background: VERDE_SUAVE }}>
+                💧
+              </div>
+              <div>
+                <h1 className="text-[21px] font-bold" style={{ fontFamily: "'Sora', sans-serif" }}>Historial de evacuaciones</h1>
+                <p className="text-[13px]" style={{ color: GRIS }}>{paciente?.nombre} · últimos 30 días</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2.5 mb-4">
+              <div className="rounded-2xl px-3 py-3.5" style={{ background: 'white', border: `1px solid ${BORDE}` }}>
+                <div className="text-lg font-bold" style={{ fontFamily: "'Sora', sans-serif" }}>{statsHistorial.promedio}</div>
+                <div className="text-[10.5px] mt-0.5 leading-tight" style={{ color: GRIS }}>Veces al día (promedio)</div>
+              </div>
+              <div className="rounded-2xl px-3 py-3.5" style={{ background: 'white', border: `1px solid ${BORDE}` }}>
+                <div className="text-lg font-bold" style={{ fontFamily: "'Sora', sans-serif" }}>{statsHistorial.diasSinEvacuar}</div>
+                <div className="text-[10.5px] mt-0.5 leading-tight" style={{ color: GRIS }}>Días sin evacuar</div>
+              </div>
+              <div className="rounded-2xl px-3 py-3.5" style={{ background: 'white', border: `1px solid ${BORDE}` }}>
+                <div className="text-lg font-bold" style={{ fontFamily: "'Sora', sans-serif" }}>{statsHistorial.diasConDiarrea}</div>
+                <div className="text-[10.5px] mt-0.5 leading-tight" style={{ color: GRIS }}>Días con diarrea</div>
+              </div>
+            </div>
+
+            <div className="rounded-2xl p-[18px]" style={{ background: 'white', border: `1px solid ${BORDE}`, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
+              <h2 className="text-[14.5px] font-bold" style={{ fontFamily: "'Sora', sans-serif" }}>Veces al día · últimos 30 días</h2>
+              <p className="text-[12px] mt-0.5" style={{ color: GRIS }}>
+                Cada barra es un día. El círculo rojo abajo marca un día sin ninguna evacuación registrada.
+              </p>
+
+              <div className="flex items-end gap-[3px] mt-5" style={{ height: '130px' }}>
+                {diasAgregados.map((d, i) => {
+                  const alturaPct = d.veces > 0 ? Math.max(8, (d.veces / maxVeces) * 100) : 3
+                  const color = d.veces === 0 ? '#F1F5F9' : (d.tipo ? CONSISTENCIA_COLORS[d.tipo] : VERDE)
+                  const etiquetaDia = `Hace ${29 - i} día${29 - i === 1 ? '' : 's'}`
+                  return (
+                    <div key={i} className="flex-1 flex flex-col items-center justify-end h-full min-w-[5px]">
+                      {d.veces === 0 && (
+                        <div
+                          className="w-[7px] h-[7px] rounded-full mb-0.5"
+                          style={{ background: '#FCA5A5', border: `1.5px solid ${ROJO}` }}
+                          title={`${etiquetaDia} · sin evacuación`}
+                        />
+                      )}
+                      <div
+                        className="w-full rounded-t-sm"
+                        style={{ maxWidth: '9px', height: `${alturaPct}%`, background: color }}
+                        title={`${etiquetaDia} · ${d.veces} ${d.veces === 1 ? 'vez' : 'veces'}${d.tipo ? ' · ' + CONSISTENCIA_LABELS[d.tipo] : ''}`}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="flex justify-between mt-1.5 text-[10px]" style={{ color: GRIS_CLARO }}>
+                <span>Hace 30 días</span>
+                <span>Hoy</span>
+              </div>
+
+              <div className="flex items-center gap-3.5 flex-wrap mt-3.5 text-[10.5px]" style={{ color: GRIS_CLARO }}>
+                <span><span className="inline-block w-[9px] h-[9px] rounded-[3px] mr-1" style={{ background: VERDE }} />Normal</span>
+                <span><span className="inline-block w-[9px] h-[9px] rounded-[3px] mr-1" style={{ background: AMBAR }} />Blanda/Dura</span>
+                <span><span className="inline-block w-[9px] h-[9px] rounded-[3px] mr-1" style={{ background: ROJO }} />Diarrea</span>
+                <span><span className="inline-block w-[9px] h-[9px] rounded-full mr-1" style={{ background: '#FCA5A5', border: `1.5px solid ${ROJO}` }} />Sin evacuación</span>
+              </div>
+            </div>
+          </>
         )}
       </div>
-
-      {esFamilia && (
-        <button
-          onClick={abrirModalNuevo}
-          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[#1A6BFF] text-white text-2xl shadow-lg flex items-center justify-center"
-        >
-          +
-        </button>
-      )}
 
       {/* Modal nuevo registro */}
       {modalAbierto && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50">
-          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-6">
-            <h3 className="font-bold text-lg mb-4">Nuevo registro</h3>
+          <div className="bg-white rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-lg mb-4" style={{ fontFamily: "'Sora', sans-serif" }}>Nuevo registro</h3>
 
-            <label className="block text-sm text-gray-500 mb-1">Fecha</label>
+            <label className="block text-sm mb-1" style={{ color: GRIS }}>Fecha</label>
             <input
               type="date"
               value={toDateInputValue(fechaModal)}
-              max={toDateInputValue(new Date())}
+              max={toDateInputValue(hoy)}
               onChange={(e) => setFechaModal(new Date(e.target.value + 'T12:00:00'))}
               className="w-full border rounded-lg px-3 py-2 mb-4"
             />
 
-            <label className="block text-sm text-gray-500 mb-1">Hora</label>
+            <label className="block text-sm mb-1" style={{ color: GRIS }}>Hora</label>
             <input
               type="time"
               value={hora}
@@ -390,7 +634,7 @@ export default function BitacoraEvacuacionesPage() {
               className="w-full border rounded-lg px-3 py-2 mb-4"
             />
 
-            <label className="block text-sm text-gray-500 mb-1">Consistencia</label>
+            <label className="block text-sm mb-1" style={{ color: GRIS }}>Consistencia</label>
             <div className="flex gap-2 mb-4 flex-wrap">
               {(Object.keys(CONSISTENCIA_LABELS) as Consistencia[]).map(c => (
                 <button
@@ -400,7 +644,7 @@ export default function BitacoraEvacuacionesPage() {
                   style={
                     consistencia === c
                       ? { backgroundColor: CONSISTENCIA_COLORS[c], color: 'white', borderColor: CONSISTENCIA_COLORS[c] }
-                      : { borderColor: '#E5E7EB', color: '#6B7280' }
+                      : { borderColor: BORDE, color: GRIS }
                   }
                 >
                   {CONSISTENCIA_LABELS[c]}
@@ -408,13 +652,13 @@ export default function BitacoraEvacuacionesPage() {
               ))}
             </div>
 
-            <label className="block text-sm text-gray-500 mb-1">Foto (opcional)</label>
+            <label className="block text-sm mb-1" style={{ color: GRIS }}>Foto (opcional)</label>
             <input type="file" accept="image/*" onChange={seleccionarFoto} className="mb-2 text-sm" />
             {previewFoto && (
               <img src={previewFoto} alt="Previsualización" className="w-24 h-24 object-cover rounded-lg mb-4" />
             )}
 
-            <label className="block text-sm text-gray-500 mb-1">Nota (opcional)</label>
+            <label className="block text-sm mb-1" style={{ color: GRIS }}>Nota (opcional)</label>
             <textarea
               value={nota}
               onChange={(e) => setNota(e.target.value)}
@@ -427,14 +671,16 @@ export default function BitacoraEvacuacionesPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setModalAbierto(false)}
-                className="flex-1 py-2 rounded-lg border text-gray-600"
+                className="flex-1 py-2 rounded-lg border"
+                style={{ color: GRIS }}
               >
                 Cancelar
               </button>
               <button
                 onClick={guardarRegistro}
                 disabled={guardando}
-                className="flex-1 py-2 rounded-lg bg-[#1A6BFF] text-white disabled:opacity-50"
+                className="flex-1 py-2 rounded-lg text-white disabled:opacity-50"
+                style={{ background: VERDE }}
               >
                 {guardando ? 'Guardando...' : 'Guardar'}
               </button>
@@ -446,23 +692,33 @@ export default function BitacoraEvacuacionesPage() {
       {/* Visor de foto ampliada */}
       {fotoVisor && (
         <div
-          className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6"
           onClick={() => setFotoVisor(null)}
         >
           <div className="bg-white rounded-2xl overflow-hidden max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
             <img src={urlVisor} alt="Registro" className="w-full max-h-96 object-contain bg-black" />
             <div className="p-4">
-              <p className="font-medium">{formatHora(fotoVisor.hora_inicio)}</p>
-              {fotoVisor.consistencia && (
-                <span
-                  className="inline-block mt-1 text-xs px-2 py-0.5 rounded-full text-white"
-                  style={{ backgroundColor: CONSISTENCIA_COLORS[fotoVisor.consistencia] }}
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-bold text-[15px]" style={{ fontFamily: "'Sora', sans-serif" }}>{formatHora(fotoVisor.hora_inicio)}</span>
+                {fotoVisor.consistencia && (
+                  <span
+                    className="text-[10.5px] font-bold px-2.5 py-1 rounded-full"
+                    style={{ background: CONSISTENCIA_SUAVE[fotoVisor.consistencia], color: CONSISTENCIA_COLORS[fotoVisor.consistencia] }}
+                  >
+                    {CONSISTENCIA_LABELS[fotoVisor.consistencia]}
+                  </span>
+                )}
+              </div>
+              {fotoVisor.nota && <p className="text-[13px]" style={{ color: GRIS }}>{fotoVisor.nota}</p>}
+              <div className="text-center mt-3.5">
+                <button
+                  onClick={() => setFotoVisor(null)}
+                  className="text-[12.5px] font-semibold px-5 py-2 rounded-lg"
+                  style={{ background: '#F1F5F9', color: GRIS }}
                 >
-                  {CONSISTENCIA_LABELS[fotoVisor.consistencia]}
-                </span>
-              )}
-              {fotoVisor.nota && <p className="text-sm text-gray-500 mt-2">{fotoVisor.nota}</p>}
-              <button onClick={() => setFotoVisor(null)} className="mt-4 text-sm text-gray-400">Cerrar</button>
+                  Cerrar
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -471,8 +727,19 @@ export default function BitacoraEvacuacionesPage() {
   )
 }
 
-function RegistroFotoThumb({ registro, supabase, onClick }: { registro: Registro, supabase: any, onClick: () => void }) {
+function RegistroFotoThumb({
+  registro,
+  supabase,
+  onClick,
+  formatHora,
+}: {
+  registro: Registro
+  supabase: any
+  onClick: () => void
+  formatHora: (iso: string) => string
+}) {
   const [url, setUrl] = useState<string | null>(null)
+  const color = registro.consistencia ? CONSISTENCIA_COLORS[registro.consistencia] : '#94A3B8'
 
   useEffect(() => {
     async function cargar() {
@@ -486,15 +753,22 @@ function RegistroFotoThumb({ registro, supabase, onClick }: { registro: Registro
   }, [registro.foto_url])
 
   return (
-    <button onClick={onClick} className="relative aspect-square rounded-lg overflow-hidden bg-gray-100">
+    <button
+      onClick={onClick}
+      className="relative aspect-square rounded-xl overflow-hidden"
+      style={{ background: '#F1F5F9', border: `2px solid ${color}` }}
+    >
       {url && <img src={url} alt="" className="w-full h-full object-cover" />}
-      <span className="absolute bottom-1 left-1 text-[10px] bg-black/60 text-white px-1.5 py-0.5 rounded">
-        {new Date(registro.hora_inicio).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+      <span
+        className="absolute top-[5px] right-[5px] text-[9px] font-bold text-white px-1.5 py-0.5 rounded-full"
+        style={{ background: 'rgba(15,23,42,0.5)' }}
+      >
+        {formatHora(registro.hora_inicio)}
       </span>
       {registro.consistencia && (
         <span
-          className="absolute top-1 right-1 text-[9px] px-1.5 py-0.5 rounded-full text-white"
-          style={{ backgroundColor: CONSISTENCIA_COLORS[registro.consistencia] }}
+          className="absolute bottom-[5px] left-[5px] text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+          style={{ background: 'rgba(255,255,255,0.92)', color }}
         >
           {CONSISTENCIA_LABELS[registro.consistencia]}
         </span>
