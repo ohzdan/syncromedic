@@ -37,6 +37,10 @@ export async function middleware(request: NextRequest) {
 
   if (userData?.role !== "familia") return response
 
+  // 🔧 Bandera temporal para desactivar el check de suscripción durante pruebas.
+  // Para reactivar el cobro real: quita esta variable de Vercel o ponla en "false".
+  if (process.env.DISABLE_SUBSCRIPTION_CHECK === "true") return response
+
   const { data: suscripciones } = await supabase
     .from("suscripciones")
     .select("estado, fecha_vencimiento")
