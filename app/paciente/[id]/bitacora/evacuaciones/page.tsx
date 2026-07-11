@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef, useMemo } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
@@ -49,8 +49,6 @@ const CONSISTENCIA_SUAVE: Record<Consistencia, string> = {
   diarrea: ROJO_SUAVE,
 }
 
-const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
-
 function toDateInputValue(fecha: Date) {
   const y = fecha.getFullYear()
   const m = String(fecha.getMonth() + 1).padStart(2, '0')
@@ -60,15 +58,6 @@ function toDateInputValue(fecha: Date) {
 
 function esMismoDia(a: Date, b: Date) {
   return a.toDateString() === b.toDateString()
-}
-
-function lunesDeLaSemana(fecha: Date) {
-  const d = new Date(fecha)
-  const dia = d.getDay() // 0 = domingo
-  const diff = dia === 0 ? -6 : 1 - dia
-  d.setDate(d.getDate() + diff)
-  d.setHours(0, 0, 0, 0)
-  return d
 }
 
 export default function BitacoraEvacuacionesPage() {
@@ -83,9 +72,6 @@ export default function BitacoraEvacuacionesPage() {
 
   const [vista, setVista] = useState<'hoy' | 'historial'>('hoy')
 
-  const [fechaSeleccionada, setFechaSeleccionada] = useState(new Date())
-  const [weekOffset, setWeekOffset] = useState(0)
-  const [registros, setRegistros] = useState<Registro[]>([])
   const [registros30, setRegistros30] = useState<{ hora_inicio: string; consistencia: Consistencia | null }[]>([])
 
   const [galeria, setGaleria] = useState<Registro[]>([])
@@ -93,6 +79,12 @@ export default function BitacoraEvacuacionesPage() {
   const [galeriaHasMore, setGaleriaHasMore] = useState(true)
   const [cargandoGaleria, setCargandoGaleria] = useState(false)
   const GALERIA_PAGE = 30
+
+  const [listaTexto, setListaTexto] = useState<Registro[]>([])
+  const [listaTextoOffset, setListaTextoOffset] = useState(0)
+  const [listaTextoHasMore, setListaTextoHasMore] = useState(true)
+  const [cargandoListaTexto, setCargandoListaTexto] = useState(false)
+  const LISTA_PAGE = 20
 
   const [modalAbierto, setModalAbierto] = useState(false)
   const [fechaModal, setFechaModal] = useState(new Date())
@@ -107,7 +99,6 @@ export default function BitacoraEvacuacionesPage() {
   const [fotoVisor, setFotoVisor] = useState<Registro | null>(null)
   const [urlVisor, setUrlVisor] = useState('')
 
-  const fechaInputRef = useRef<HTMLInputElement>(null)
   const esFamilia = rol === 'familia'
   const hoy = new Date()
 
@@ -124,36 +115,33 @@ export default function BitacoraEvacuacionesPage() {
         .from('pacientes').select('nombre').eq('id', pacienteId).single()
       setPaciente(pacienteData)
 
-      await cargarRegistrosDelDia(fechaSeleccionada)
       await cargarRegistros30()
       await cargarGaleria(true)
+      await cargarListaTexto(true)
       setLoading(false)
     }
     cargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    cargarRegistrosDelDia(fechaSeleccionada)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fechaSeleccionada])
-
-  async function cargarRegistrosDelDia(fecha: Date) {
-    const inicio = new Date(fecha)
-    inicio.setHours(0, 0, 0, 0)
-    const fin = new Date(fecha)
-    fin.setHours(23, 59, 59, 999)
+  async function cargarListaTexto(reset = false) {
+    setCargandoListaTexto(true)
+    const offset = reset ? 0 : listaTextoOffset
 
     const { data } = await supabase
       .from('bitacora_registros')
       .select('id, hora_inicio, consistencia, foto_url, nota, registrado_por')
       .eq('paciente_id', pacienteId)
       .eq('tipo', 'evacuacion')
-      .gte('hora_inicio', inicio.toISOString())
-      .lte('hora_inicio', fin.toISOString())
+      .is('foto_url', null)
       .order('hora_inicio', { ascending: false })
+      .range(offset, offset + LISTA_PAGE - 1)
 
-    setRegistros(data ?? [])
+    const nuevos = data ?? []
+    setListaTexto(prev => reset ? nuevos : [...prev, ...nuevos])
+    setListaTextoOffset(offset + nuevos.length)
+    setListaTextoHasMore(nuevos.length === LISTA_PAGE)
+    setCargandoListaTexto(false)
   }
 
   async function cargarRegistros30() {
@@ -238,32 +226,10 @@ export default function BitacoraEvacuacionesPage() {
     return racha
   }, [diasAgregados])
 
-  // --- Pills de la semana ---
-  const diasSemana = useMemo(() => {
-    const lunes = lunesDeLaSemana(hoy)
-    lunes.setDate(lunes.getDate() + weekOffset * 7)
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(lunes)
-      d.setDate(d.getDate() + i)
-      return d
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekOffset])
-
-  function seleccionarDia(d: Date) {
-    if (d > hoy && !esMismoDia(d, hoy)) return
-    setFechaSeleccionada(d)
-  }
-
-  function irAHoy() {
-    setWeekOffset(0)
-    setFechaSeleccionada(new Date())
-  }
-
   function abrirModalNuevo() {
     const ahora = new Date()
     setHora(`${String(ahora.getHours()).padStart(2, '0')}:${String(ahora.getMinutes()).padStart(2, '0')}`)
-    setFechaModal(fechaSeleccionada)
+    setFechaModal(new Date())
     setConsistencia('normal')
     setNota('')
     setFoto(null)
@@ -324,10 +290,9 @@ export default function BitacoraEvacuacionesPage() {
     }
 
     setModalAbierto(false)
-    setFechaSeleccionada(fechaModal)
-    await cargarRegistrosDelDia(fechaModal)
     await cargarRegistros30()
     await cargarGaleria(true)
+    await cargarListaTexto(true)
     setGuardando(false)
   }
 
@@ -337,9 +302,9 @@ export default function BitacoraEvacuacionesPage() {
       await supabase.storage.from('documentos').remove([registro.foto_url])
     }
     await supabase.from('bitacora_registros').delete().eq('id', registro.id)
-    await cargarRegistrosDelDia(fechaSeleccionada)
     await cargarRegistros30()
     await cargarGaleria(true)
+    await cargarListaTexto(true)
   }
 
   async function abrirFoto(registro: Registro) {
@@ -357,6 +322,14 @@ export default function BitacoraEvacuacionesPage() {
     return new Date(iso).toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })
   }
 
+  function formatFechaHora(iso: string) {
+    const d = new Date(iso)
+    const fechaTxt = esMismoDia(d, hoy)
+      ? 'Hoy'
+      : d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+    return `${fechaTxt}, ${d.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' })}`
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen flex items-center justify-center" style={{ background: '#F8FAFC' }}>
@@ -365,7 +338,6 @@ export default function BitacoraEvacuacionesPage() {
     )
   }
 
-  const esHoy = esMismoDia(fechaSeleccionada, hoy)
   const maxVeces = Math.max(3, ...diasAgregados.map(d => d.veces))
 
   return (
@@ -427,62 +399,6 @@ export default function BitacoraEvacuacionesPage() {
               </div>
             )}
 
-            {/* Pills de días */}
-            <div className="flex items-center gap-1 mb-2">
-              <button onClick={() => setWeekOffset(w => w - 1)} className="px-1 text-lg" style={{ color: GRIS_CLARO }}>‹</button>
-              <div className="flex gap-2 overflow-x-auto flex-1 pb-1">
-                {diasSemana.map((d, i) => {
-                  const activo = esMismoDia(d, fechaSeleccionada)
-                  const futuro = d > hoy && !esMismoDia(d, hoy)
-                  return (
-                    <button
-                      key={i}
-                      onClick={() => seleccionarDia(d)}
-                      disabled={futuro}
-                      className="flex-shrink-0 w-[46px] rounded-2xl text-center py-2"
-                      style={{
-                        background: activo ? VERDE : 'white',
-                        border: `1.5px solid ${activo ? VERDE : BORDE}`,
-                        opacity: futuro ? 0.4 : 1,
-                      }}
-                    >
-                      <div className="text-[9px] font-semibold uppercase" style={{ color: activo ? 'white' : GRIS_CLARO, letterSpacing: '0.04em' }}>
-                        {DIAS_SEMANA[i]}
-                      </div>
-                      <div className="text-[15px] font-bold mt-0.5" style={{ color: activo ? 'white' : '#0F172A', fontFamily: "'Sora', sans-serif" }}>
-                        {d.getDate()}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-              <button onClick={() => setWeekOffset(w => w + 1)} className="px-1 text-lg" style={{ color: GRIS_CLARO }}>›</button>
-              <button
-                onClick={() => fechaInputRef.current?.showPicker?.() ?? fechaInputRef.current?.click()}
-                className="px-1.5 text-base"
-                style={{ color: GRIS_CLARO }}
-                title="Elegir fecha específica"
-              >
-                📅
-              </button>
-              <input
-                ref={fechaInputRef}
-                type="date"
-                className="sr-only"
-                value={toDateInputValue(fechaSeleccionada)}
-                max={toDateInputValue(hoy)}
-                onChange={(e) => {
-                  const d = new Date(e.target.value + 'T12:00:00')
-                  setFechaSeleccionada(d)
-                  setWeekOffset(Math.round((lunesDeLaSemana(d).getTime() - lunesDeLaSemana(hoy).getTime()) / (7 * 86400000)))
-                }}
-              />
-            </div>
-            {!esHoy && (
-              <button onClick={irAHoy} className="text-xs underline mb-4" style={{ color: AZUL }}>Volver a hoy</button>
-            )}
-            {esHoy && <div className="mb-4" />}
-
             {/* Galería global de fotos (todo el historial, más reciente primero) */}
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2.5">
@@ -528,29 +444,28 @@ export default function BitacoraEvacuacionesPage() {
               )}
             </div>
 
-            {/* Lista completa del día seleccionado */}
+            {/* Registros sin foto (feed global, más reciente primero) */}
             <div className="mb-2">
               <span className="text-[11px] font-bold uppercase" style={{ color: GRIS_CLARO, letterSpacing: '0.06em' }}>
-                Todos los registros
+                Registros sin foto
               </span>
             </div>
 
-            {registros.length === 0 ? (
+            {listaTexto.length === 0 ? (
               <div className="rounded-2xl px-4 py-8 text-center" style={{ background: 'white', border: `1px solid ${BORDE}`, color: GRIS_CLARO }}>
-                Sin registros este día.
+                Sin registros todavía.
               </div>
             ) : (
               <div className="rounded-2xl px-[18px] pt-[18px] pb-2" style={{ background: 'white', border: `1px solid ${BORDE}`, boxShadow: '0 1px 3px rgba(15,23,42,0.04)' }}>
-                {registros.map((r, i) => (
+                {listaTexto.map((r, i) => (
                   <div
                     key={r.id}
                     className="flex items-center gap-2.5 py-3 text-[13px]"
                     style={i > 0 ? { borderTop: '1px solid #F1F5F9' } : {}}
                   >
-                    <div className="font-bold text-[12.5px] w-[54px] flex-shrink-0" style={{ fontFamily: "'Sora', sans-serif" }}>
-                      {formatHora(r.hora_inicio)}
+                    <div className="font-bold text-[12.5px] w-[75px] flex-shrink-0" style={{ fontFamily: "'Sora', sans-serif" }}>
+                      {formatFechaHora(r.hora_inicio)}
                     </div>
-                    {r.foto_url && <span className="text-[13px]" style={{ color: GRIS_CLARO }}>📷</span>}
                     <div className="flex-1" style={{ color: GRIS }}>{r.nota || '—'}</div>
                     {r.consistencia && (
                       <span
@@ -566,6 +481,16 @@ export default function BitacoraEvacuacionesPage() {
                   </div>
                 ))}
               </div>
+            )}
+            {listaTextoHasMore && listaTexto.length > 0 && (
+              <button
+                onClick={() => cargarListaTexto(false)}
+                disabled={cargandoListaTexto}
+                className="w-full text-center text-[12.5px] font-semibold py-3 mt-3 rounded-xl"
+                style={{ background: 'white', border: `1px solid ${BORDE}`, color: AZUL }}
+              >
+                {cargandoListaTexto ? 'Cargando...' : 'Cargar más'}
+              </button>
             )}
 
             {esFamilia && (
