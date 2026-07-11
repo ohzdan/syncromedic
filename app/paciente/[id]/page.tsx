@@ -165,6 +165,22 @@ export default function ExpedientePaciente() {
             </Link>
           )}
 
+          {(esFamilia || esProfesionalClinico) && (
+            <Link href={`/paciente/${params.id}/bitacora/sueno`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">😴</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Diario de sueño</h2>
+              <p className="text-slate-500 text-sm">Horas dormidas, despertares nocturnos e historial de 30 días</p>
+            </Link>
+          )}
+
+          {(esFamilia || esProfesionalClinico) && (
+            <Link href={`/paciente/${params.id}/bitacora/evacuaciones`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">💧</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Bitácora de evacuaciones</h2>
+              <p className="text-slate-500 text-sm">Galería de fotos, consistencia e historial de 30 días</p>
+            </Link>
+          )}
+
           {(esFamilia || esEscuela) && (
             <Link href={`/paciente/${params.id}/recomendaciones`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
               <p className="text-2xl mb-3">📝</p>
