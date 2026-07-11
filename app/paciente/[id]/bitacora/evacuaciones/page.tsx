@@ -88,6 +88,12 @@ export default function BitacoraEvacuacionesPage() {
   const [registros, setRegistros] = useState<Registro[]>([])
   const [registros30, setRegistros30] = useState<{ hora_inicio: string; consistencia: Consistencia | null }[]>([])
 
+  const [galeria, setGaleria] = useState<Registro[]>([])
+  const [galeriaOffset, setGaleriaOffset] = useState(0)
+  const [galeriaHasMore, setGaleriaHasMore] = useState(true)
+  const [cargandoGaleria, setCargandoGaleria] = useState(false)
+  const GALERIA_PAGE = 30
+
   const [modalAbierto, setModalAbierto] = useState(false)
   const [fechaModal, setFechaModal] = useState(new Date())
   const [hora, setHora] = useState('')
@@ -120,6 +126,7 @@ export default function BitacoraEvacuacionesPage() {
 
       await cargarRegistrosDelDia(fechaSeleccionada)
       await cargarRegistros30()
+      await cargarGaleria(true)
       setLoading(false)
     }
     cargar()
@@ -163,6 +170,26 @@ export default function BitacoraEvacuacionesPage() {
       .order('hora_inicio', { ascending: true })
 
     setRegistros30(data ?? [])
+  }
+
+  async function cargarGaleria(reset = false) {
+    setCargandoGaleria(true)
+    const offset = reset ? 0 : galeriaOffset
+
+    const { data } = await supabase
+      .from('bitacora_registros')
+      .select('id, hora_inicio, consistencia, foto_url, nota, registrado_por')
+      .eq('paciente_id', pacienteId)
+      .eq('tipo', 'evacuacion')
+      .not('foto_url', 'is', null)
+      .order('hora_inicio', { ascending: false })
+      .range(offset, offset + GALERIA_PAGE - 1)
+
+    const nuevos = data ?? []
+    setGaleria(prev => reset ? nuevos : [...prev, ...nuevos])
+    setGaleriaOffset(offset + nuevos.length)
+    setGaleriaHasMore(nuevos.length === GALERIA_PAGE)
+    setCargandoGaleria(false)
   }
 
   // --- Agregados para Historial (últimos 30 días) ---
@@ -300,6 +327,7 @@ export default function BitacoraEvacuacionesPage() {
     setFechaSeleccionada(fechaModal)
     await cargarRegistrosDelDia(fechaModal)
     await cargarRegistros30()
+    await cargarGaleria(true)
     setGuardando(false)
   }
 
@@ -311,6 +339,7 @@ export default function BitacoraEvacuacionesPage() {
     await supabase.from('bitacora_registros').delete().eq('id', registro.id)
     await cargarRegistrosDelDia(fechaSeleccionada)
     await cargarRegistros30()
+    await cargarGaleria(true)
   }
 
   async function abrirFoto(registro: Registro) {
@@ -336,8 +365,6 @@ export default function BitacoraEvacuacionesPage() {
     )
   }
 
-  const conFoto = registros.filter(r => r.foto_url)
-  const sinFoto = registros.filter(r => !r.foto_url)
   const esHoy = esMismoDia(fechaSeleccionada, hoy)
   const maxVeces = Math.max(3, ...diasAgregados.map(d => d.veces))
 
@@ -456,39 +483,52 @@ export default function BitacoraEvacuacionesPage() {
             )}
             {esHoy && <div className="mb-4" />}
 
-            {/* Galería con foto */}
-            {conFoto.length > 0 && (
-              <div className="mb-5">
-                <div className="flex items-center justify-between mb-2.5">
-                  <span className="text-[11px] font-bold uppercase" style={{ color: GRIS_CLARO, letterSpacing: '0.06em' }}>
-                    Fotos · {esHoy ? 'Hoy' : DIAS_SEMANA[(fechaSeleccionada.getDay() + 6) % 7] + ' ' + fechaSeleccionada.getDate()}
-                  </span>
-                </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {conFoto.map(r => (
-                    <RegistroFotoThumb
-                      key={r.id}
-                      registro={r}
-                      supabase={supabase}
-                      onClick={() => abrirFoto(r)}
-                      formatHora={formatHora}
-                    />
-                  ))}
-                  {esFamilia && (
-                    <button
-                      onClick={abrirModalNuevo}
-                      className="aspect-square rounded-xl flex flex-col items-center justify-center gap-1"
-                      style={{ background: 'white', border: `1.5px dashed #CBD5E1`, color: GRIS_CLARO }}
-                    >
-                      <span className="text-xl">📷</span>
-                      <p className="text-[9.5px] font-semibold text-center px-1">Agregar foto</p>
-                    </button>
-                  )}
-                </div>
+            {/* Galería global de fotos (todo el historial, más reciente primero) */}
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-2.5">
+                <span className="text-[11px] font-bold uppercase" style={{ color: GRIS_CLARO, letterSpacing: '0.06em' }}>
+                  Galería
+                </span>
               </div>
-            )}
+              <div className="grid grid-cols-3 gap-1.5">
+                {esFamilia && (
+                  <button
+                    onClick={abrirModalNuevo}
+                    className="aspect-square rounded-xl flex flex-col items-center justify-center gap-1"
+                    style={{ background: 'white', border: `1.5px dashed #CBD5E1`, color: GRIS_CLARO }}
+                  >
+                    <span className="text-xl">📷</span>
+                    <p className="text-[9.5px] font-semibold text-center px-1">Agregar foto</p>
+                  </button>
+                )}
+                {galeria.map(r => (
+                  <RegistroFotoThumb
+                    key={r.id}
+                    registro={r}
+                    supabase={supabase}
+                    onClick={() => abrirFoto(r)}
+                    formatHora={formatHora}
+                  />
+                ))}
+              </div>
+              {galeria.length === 0 && (
+                <div className="rounded-2xl px-4 py-8 text-center mt-2" style={{ background: 'white', border: `1px solid ${BORDE}`, color: GRIS_CLARO }}>
+                  Aún no hay fotos registradas.
+                </div>
+              )}
+              {galeriaHasMore && galeria.length > 0 && (
+                <button
+                  onClick={() => cargarGaleria(false)}
+                  disabled={cargandoGaleria}
+                  className="w-full text-center text-[12.5px] font-semibold py-3 mt-3 rounded-xl"
+                  style={{ background: 'white', border: `1px solid ${BORDE}`, color: AZUL }}
+                >
+                  {cargandoGaleria ? 'Cargando...' : 'Cargar más'}
+                </button>
+              )}
+            </div>
 
-            {/* Lista completa */}
+            {/* Lista completa del día seleccionado */}
             <div className="mb-2">
               <span className="text-[11px] font-bold uppercase" style={{ color: GRIS_CLARO, letterSpacing: '0.06em' }}>
                 Todos los registros
