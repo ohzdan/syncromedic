@@ -253,7 +253,8 @@ const searchParams = useSearchParams();
     if (pantalla.tipo !== "paso") { avanzar(); setGuardando(false); return; }
 
     const id = pantalla.id;
-    let update: any = { scouting_paso: indice + 1, updated_at: new Date().toISOString() };
+    let update: any = { updated_at: new Date().toISOString() };
+    if (!modoEditar) update.scouting_paso = indice + 1;
 
     if (!omitir) {
       if (id === "diagnosticos") update.diagnosticos_principales = tags;
@@ -285,7 +286,7 @@ const searchParams = useSearchParams();
       }
     }
 
-    if (indice + 1 >= FLUJO.length - 1) update.scouting_completo = true;
+    if (!modoEditar && indice + 1 >= FLUJO.length - 1) update.scouting_completo = true;
 
     await supabase.from("pacientes").update(update).eq("id", pacienteId);
     setPaciente((prev: any) => ({ ...prev, ...update }));
@@ -294,6 +295,10 @@ const searchParams = useSearchParams();
   }
 
   function avanzar() {
+    if (modoEditar) {
+      setIndice(FLUJO.length - 1); // regresar directo al resumen
+      return;
+    }
     const siguiente = indice + 1;
     if (siguiente >= FLUJO.length) { router.push(`/paciente/${pacienteId}`); return; }
     const sig = FLUJO[siguiente];
@@ -406,14 +411,57 @@ const searchParams = useSearchParams();
           <ResumenItem label="Alergias" valor={paciente?.alergias?.join(", ")} onEditar={() => irAPaso("alergias")} />
           <ResumenItem label="Tipo de sangre" valor={paciente?.tipo_sangre} onEditar={() => irAPaso("tipo_sangre")} />
           <ResumenItem label="Lateralidad" valor={paciente?.lateralidad} onEditar={() => irAPaso("lateralidad")} />
+          <ResumenItem label="Embarazo de alto riesgo" valor={paciente?.embarazo_alto_riesgo} onEditar={() => irAPaso("embarazo_alto_riesgo")} />
+          <ResumenItem
+            label="Complicaciones del embarazo"
+            valor={[
+              paciente?.complicaciones_embarazo && `Complicaciones: ${paciente.complicaciones_embarazo}`,
+              paciente?.diabetes_gestacional && `Diabetes gestacional: ${paciente.diabetes_gestacional}`,
+            ].filter(Boolean).join(" · ") || null}
+            onEditar={() => irAPaso("complicaciones_embarazo")}
+          />
           <ResumenItem label="Tipo de parto" valor={paciente?.tipo_parto} onEditar={() => irAPaso("parto")} />
           <ResumenItem label="Peso al nacer" valor={paciente?.peso_nacer} onEditar={() => irAPaso("nacimiento")} />
-          <ResumenItem label="APGAR" valor={paciente?.apgar} onEditar={() => irAPaso("ucin_apgar")} />
+          <ResumenItem
+            label="UCIN y APGAR"
+            valor={[
+              paciente?.requirio_ucin && `UCIN: ${paciente.requirio_ucin}`,
+              paciente?.apgar && `APGAR: ${paciente.apgar}`,
+            ].filter(Boolean).join(" · ") || null}
+            onEditar={() => irAPaso("ucin_apgar")}
+          />
+          <ResumenItem
+            label="Tamices neonatales"
+            valor={[paciente?.tamiz_metabolico, paciente?.tamiz_auditivo, paciente?.tamiz_cardiaco].filter(Boolean).join(" · ") || null}
+            onEditar={() => irAPaso("tamices")}
+          />
+          <ResumenItem
+            label="Desarrollo motor"
+            valor={paciente?.desarrollo_motor && (paciente.desarrollo_motor.gateo || paciente.desarrollo_motor.camino) ? `Gateo: ${paciente.desarrollo_motor.gateo || "—"} · Caminó: ${paciente.desarrollo_motor.camino || "—"}` : null}
+            onEditar={() => irAPaso("desarrollo_motor")}
+          />
+          <ResumenItem
+            label="Desarrollo del lenguaje"
+            valor={paciente?.desarrollo_lenguaje?.primeras_palabras ? `Primeras palabras: ${paciente.desarrollo_lenguaje.primeras_palabras}` : null}
+            onEditar={() => irAPaso("desarrollo_lenguaje")}
+          />
           <ResumenItem label="Terapias actuales" valor={paciente?.terapias_actuales?.join(", ")} onEditar={() => irAPaso("terapias")} />
+          <ResumenItem
+            label="Antecedentes familiares"
+            valor={formatAntecedentesFamiliares(paciente?.antecedentes_familiares_detalle)}
+            onEditar={() => irAPaso("antecedentes_familiares")}
+          />
+          <ResumenItem
+            label="Historial médico"
+            valor={[paciente?.cirugias_previas, paciente?.hospitalizaciones_previas].filter(Boolean).join(" · ") || null}
+            onEditar={() => irAPaso("historial_medico")}
+          />
+          <ResumenItem label="Condiciones crónicas" valor={paciente?.condiciones_cronicas?.join(", ")} onEditar={() => irAPaso("condiciones_cronicas")} />
+          <ResumenItem label="Vacunas registradas" valor={paciente?.vacunas?.lista?.length ? `${paciente.vacunas.lista.length} vacunas` : null} onEditar={() => irAPaso("vacunas")} />
           <ResumenItem label="Sueño" valor={paciente?.sueno_hora_dormir ? `Duerme ${paciente.sueno_hora_dormir} · Despierta ${paciente.sueno_hora_despertar}` : null} onEditar={() => irAPaso("sueno")} />
+          <ResumenItem label="Alimentación" valor={paciente?.alimentacion_notas} onEditar={() => irAPaso("alimentacion")} />
           <ResumenItem label="Escuela regular" valor={paciente?.escuela_regular} onEditar={() => irAPaso("entorno")} />
           <ResumenItem label="Con quién vive" valor={paciente?.con_quien_vive} onEditar={() => irAPaso("entorno")} />
-          <ResumenItem label="Vacunas registradas" valor={paciente?.vacunas?.lista?.length ? `${paciente.vacunas.lista.length} vacunas` : null} onEditar={() => irAPaso("vacunas")} />
           <ResumenItem label="Contacto de emergencia" valor={paciente?.contacto_emergencia?.nombre} onEditar={() => irAPaso("emergencia")} sinBorde />
         </div>
         <button onClick={() => router.push(`/paciente/${pacienteId}`)} className="w-full bg-[#00C97A] hover:bg-green-600 text-white font-semibold py-4 rounded-xl transition-colors">
@@ -767,6 +815,20 @@ function PasoOpciones({ titulo, descripcion, opciones, valor, onChange }: any) {
       </div>
     </div>
   );
+}
+
+function formatAntecedentesFamiliares(detalle: Record<string, string[]> | undefined) {
+  if (!detalle) return null;
+  const entradas = Object.entries(detalle).filter(
+    ([, parentescos]) => parentescos && parentescos.length > 0 && !(parentescos.length === 1 && parentescos[0] === "Ninguno")
+  );
+  if (entradas.length === 0) return null;
+  return entradas
+    .map(([condId, parentescos]) => {
+      const label = ANTECEDENTES_FAMILIARES.find(a => a.id === condId)?.label || condId;
+      return `${label} (${parentescos.join(", ")})`;
+    })
+    .join("; ");
 }
 
 function ResumenItem({ label, valor, onEditar, sinBorde }: any) {
