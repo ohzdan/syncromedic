@@ -65,6 +65,11 @@ export default function Home() {
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-900 placeholder:text-slate-400 text-sm focus:outline-none focus:border-[#1A6BFF] transition-colors"
               />
+              <div className="text-right mt-1.5">
+                <Link href="/recuperar" className="text-[#1A6BFF] text-xs hover:underline">
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              </div>
             </div>
 
             {error && <p className="text-red-500 text-sm text-center">{error}</p>}
