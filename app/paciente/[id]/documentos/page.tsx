@@ -11,6 +11,15 @@ const CATEGORIAS = [
   { id: "otro", label: "Otro", emoji: "📄" },
 ];
 
+// Mapea la categoría del frontend al enum tipo_documento real en Postgres
+// (estudio | receta | analisis | reporte | otro).
+const CATEGORIA_A_TIPO_ENUM: Record<string, string> = {
+  laboratorio: "analisis",
+  imagen: "estudio",
+  receta: "receta",
+  otro: "otro",
+};
+
 type Documento = {
   id: string;
   nombre: string;
@@ -116,7 +125,7 @@ export default function DocumentosPage() {
       archivo_url: path,
       tipo_archivo: archivo.type,
       subido_por: user!.id,
-      tipo: categoria,
+      tipo: CATEGORIA_A_TIPO_ENUM[categoria] || "otro",
     });
 
     if (dbError) {

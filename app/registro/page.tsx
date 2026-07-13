@@ -16,13 +16,20 @@ export default function Registro() {
   async function handleRegistro() {
     setLoading(true);
     setError("");
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: nombre, role: "familia" } }
     });
     if (error) {
-      setError("Ocurrió un error al crear tu cuenta. Intenta de nuevo.");
+      if (error.message.toLowerCase().includes("already registered") || error.message.toLowerCase().includes("already exists")) {
+        setError("Ya existe una cuenta con este correo. Inicia sesión en su lugar.");
+      } else {
+        setError("Ocurrió un error al crear tu cuenta. Intenta de nuevo.");
+      }
+    } else if (data.user && data.user.identities && data.user.identities.length === 0) {
+      // Supabase responde "éxito" sin error cuando el correo ya está registrado.
+      setError("Ya existe una cuenta con este correo. Inicia sesión en su lugar.");
     } else {
       router.push("/consentimiento");
     }

@@ -275,7 +275,7 @@ export default function BitacoraSuenoPage() {
         <Link href={`/paciente/${pacienteId}`} className="text-slate-400 hover:text-slate-600 text-sm">← Regresar</Link>
       </nav>
 
-      <div className="max-w-md mx-auto px-6 py-8">
+      <div className="max-w-2xl mx-auto px-6 py-8">
         <div className="flex bg-slate-100 rounded-xl p-1 mb-5">
           <button onClick={() => setVista('hoy')} className={`flex-1 text-sm font-bold py-2 rounded-lg transition-colors ${vista === 'hoy' ? 'bg-white text-[#4C4FE0] shadow-sm' : 'text-slate-500'}`}>Hoy</button>
           <button onClick={() => setVista('historial')} className={`flex-1 text-sm font-bold py-2 rounded-lg transition-colors ${vista === 'historial' ? 'bg-white text-[#4C4FE0] shadow-sm' : 'text-slate-500'}`}>Historial</button>

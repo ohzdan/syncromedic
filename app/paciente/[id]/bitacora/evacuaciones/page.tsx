@@ -342,7 +342,7 @@ export default function BitacoraEvacuacionesPage() {
 
   return (
     <main className="min-h-screen pb-10" style={{ background: '#F8FAFC', fontFamily: "'DM Sans', sans-serif" }}>
-      <div className="max-w-md mx-auto px-4 pt-6">
+      <div className="max-w-2xl mx-auto px-4 pt-6">
 
         {/* Nav */}
         <div className="flex items-center justify-between mb-5">
