@@ -116,6 +116,14 @@ export default function ExpedientePaciente() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
+          {(esFamilia || esProfesionalClinico) && (
+            <Link href={`/paciente/${params.id}/resumen`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">📄</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Expediente completo</h2>
+              <p className="text-slate-500 text-sm">Antecedentes, desarrollo, vacunas y toda la información clínica</p>
+            </Link>
+          )}
+
           {esFamilia && (
             <Link href={`/paciente/${params.id}/equipo`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
               <p className="text-2xl mb-3">🩺</p>
