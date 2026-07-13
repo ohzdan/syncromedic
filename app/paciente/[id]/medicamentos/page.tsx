@@ -27,6 +27,7 @@ type Medicamento = {
   indicado_por: string;
   fecha_inicio: string;
   fecha_fin: string | null;
+  fecha_suspension: string | null;
   notas: string | null;
   activo: boolean;
   created_at: string;
@@ -148,7 +149,8 @@ export default function MedicamentosPage() {
 
   async function desactivarMedicamento(id: string, nombre: string) {
     if (!confirm(`¿Marcar "${nombre}" como suspendido?`)) return;
-    await supabase.from("medicamentos_activos").update({ activo: false }).eq("id", id);
+    const fechaSuspension = new Date().toISOString().slice(0, 10);
+    await supabase.from("medicamentos_activos").update({ activo: false, fecha_suspension: fechaSuspension }).eq("id", id);
     await cargarMedicamentos();
   }
 

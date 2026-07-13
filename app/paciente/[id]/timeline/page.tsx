@@ -87,7 +87,7 @@ export default function TimelinePage() {
 
       const { data: meds } = await supabase
         .from('medicamentos_activos')
-        .select('id, nombre_medicamento, dosis, frecuencia, indicado_por, fecha_inicio, created_at')
+        .select('id, nombre_medicamento, dosis, frecuencia, indicado_por, fecha_inicio, fecha_suspension, created_at')
         .eq('paciente_id', pacienteId)
         .is('deleted_at', null)
 
@@ -100,6 +100,17 @@ export default function TimelinePage() {
           autor:       m.indicado_por || 'Sin especificar',
           fecha:       m.fecha_inicio || m.created_at,
         })
+
+        if (m.fecha_suspension) {
+          todos.push({
+            id:          'med-susp-' + m.id,
+            tipo:        'medicamento',
+            titulo:      m.nombre_medicamento + ' (suspendido)',
+            descripcion: 'Medicamento suspendido',
+            autor:       'Familia',
+            fecha:       m.fecha_suspension,
+          })
+        }
       }
 
       const { data: docs } = await supabase
