@@ -26,6 +26,7 @@ type Registro = {
   hora_fin: string | null
   motivo: string | null
   nota: string | null
+  pipi_nocturno: boolean | null
 }
 
 function formatHora(iso: string) {
@@ -91,6 +92,7 @@ export default function BitacoraSuenoPage() {
   const [modalSimple, setModalSimple] = useState<null | 'dormir' | 'fin'>(null)
   const fechaInputRef = useRef<HTMLInputElement>(null)
   const [horaSimple, setHoraSimple] = useState('20:40')
+  const [pipiSimple, setPipiSimple] = useState(false)
   const [guardandoSimple, setGuardandoSimple] = useState(false)
 
   const [modalAbierto, setModalAbierto] = useState(false)
@@ -123,7 +125,7 @@ export default function BitacoraSuenoPage() {
   async function cargarNoche(fecha: string) {
     const { data } = await supabase
       .from('bitacora_registros')
-      .select('id, tipo, hora_inicio, hora_fin, motivo, nota')
+      .select('id, tipo, hora_inicio, hora_fin, motivo, nota, pipi_nocturno')
       .eq('paciente_id', pacienteId)
       .eq('noche_fecha', fecha)
       .in('tipo', ['sueno_inicio', 'sueno_despertar', 'sueno_fin'])
@@ -201,6 +203,7 @@ export default function BitacoraSuenoPage() {
 
   function abrirModalFin() {
     setHoraSimple('06:50')
+    setPipiSimple(false)
     setModalSimple('fin')
   }
 
@@ -220,6 +223,7 @@ export default function BitacoraSuenoPage() {
       tipo: modalSimple === 'dormir' ? 'sueno_inicio' : 'sueno_fin',
       noche_fecha: fechaSeleccionada,
       hora_inicio: horaInicioFinal,
+      pipi_nocturno: modalSimple === 'fin' ? pipiSimple : null,
       registrado_por: user?.id,
     })
     setGuardandoSimple(false)
@@ -266,12 +270,12 @@ export default function BitacoraSuenoPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2 no-underline">
           <div className="w-7 h-7 rounded-lg bg-[#4C4FE0] flex items-center justify-center">
             <span className="text-white font-bold text-xs">S</span>
           </div>
           <span className="text-slate-800 font-bold text-lg tracking-tight">Syncro<span className="text-[#4C4FE0]">Medic</span></span>
-        </div>
+        </Link>
         <Link href={`/paciente/${pacienteId}`} className="text-slate-400 hover:text-slate-600 text-sm">← Regresar</Link>
       </nav>
 
@@ -358,6 +362,11 @@ export default function BitacoraSuenoPage() {
                   <div className="text-center py-2">
                     <p className="font-bold text-2xl text-slate-800">{formatHora(inicio.hora_inicio)}</p>
                     <p className="text-slate-400 text-xs mt-1">hasta {formatHora(fin.hora_inicio)}</p>
+                    {fin.pipi_nocturno && (
+                      <span className="inline-block mt-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                        💧 Pipi nocturno
+                      </span>
+                    )}
                   </div>
                   <div className="flex justify-around border-t border-slate-100 pt-3 mt-3 text-center">
                     <div>
@@ -506,7 +515,7 @@ export default function BitacoraSuenoPage() {
               {paciente?.nombre} · {new Date((modalSimple === 'dormir' ? fechaMasDias(fechaSeleccionada, -1) : fechaSeleccionada) + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
             </p>
 
-            <div className="mb-6">
+            <div className="mb-4">
               <label className="text-slate-500 text-xs mb-1 block">
                 {modalSimple === 'dormir' ? 'Se durmió a las' : 'Despertó definitivamente a las'}
               </label>
@@ -518,6 +527,18 @@ export default function BitacoraSuenoPage() {
                 className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-[#4C4FE0]"
               />
             </div>
+
+            {modalSimple === 'fin' && (
+              <label className="flex items-center gap-2.5 bg-slate-50 rounded-xl px-4 py-3 mb-6 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={pipiSimple}
+                  onChange={e => setPipiSimple(e.target.checked)}
+                  className="w-4 h-4 accent-[#4C4FE0]"
+                />
+                <span className="text-slate-700 text-sm font-medium">💧 ¿Hizo pipi en la noche?</span>
+              </label>
+            )}
 
             <div className="flex gap-3">
               <button onClick={() => setModalSimple(null)} className="flex-1 bg-slate-100 text-slate-600 text-sm font-bold py-3 rounded-xl">Cancelar</button>

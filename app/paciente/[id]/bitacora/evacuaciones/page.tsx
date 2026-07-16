@@ -346,7 +346,7 @@ export default function BitacoraEvacuacionesPage() {
 
         {/* Nav */}
         <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
+          <Link href="/dashboard" className="flex items-center gap-2 no-underline">
             <div
               className="w-[26px] h-[26px] rounded-lg flex items-center justify-center text-white text-xs font-extrabold"
               style={{ background: AZUL, fontFamily: "'Sora', sans-serif" }}
@@ -356,7 +356,7 @@ export default function BitacoraEvacuacionesPage() {
             <div className="font-bold text-base" style={{ fontFamily: "'Sora', sans-serif" }}>
               Syncro<span style={{ color: AZUL }}>Medic</span>
             </div>
-          </div>
+          </Link>
           <Link href={`/paciente/${pacienteId}`} className="text-[13px]" style={{ color: GRIS }}>
             ← Volver al expediente
           </Link>
