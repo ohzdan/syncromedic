@@ -8,6 +8,7 @@ const TIPOS_NOTA = [
   { id: "consulta", label: "Consulta", emoji: "🩺" },
   { id: "sesion_terapia", label: "Sesión de terapia", emoji: "🧠" },
   { id: "urgencia", label: "Urgencia", emoji: "🚨" },
+  { id: "estudio", label: "Estudio", emoji: "🔬" },
   { id: "seguimiento", label: "Seguimiento", emoji: "📊" },
   { id: "interconsulta", label: "Interconsulta", emoji: "🔄" },
 ];
@@ -132,7 +133,7 @@ export default function NotasPage() {
     let imagenPath = null;
     if (imagen) {
       const ext = imagen.name.split(".").pop();
-      const path = `notas/${pacienteId}/${Date.now()}.${ext}`;
+      const path = `${pacienteId}/notas/${Date.now()}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from("documentos")
         .upload(path, imagen);
@@ -220,6 +221,9 @@ export default function NotasPage() {
     ? notas
     : notas.filter(n => n.tipo_nota === filtroTipo);
 
+  // Solo el equipo clínico (no familia, no escuela) puede crear/firmar notas clínicas.
+  const puedeEscribirNotas = usuario && usuario.role !== "familia" && usuario.role !== "escuela";
+
   if (loading) return (
     <main className="min-h-screen bg-slate-50 flex items-center justify-center">
       <p className="text-slate-400">Cargando...</p>
@@ -248,13 +252,23 @@ export default function NotasPage() {
             <h1 className="text-slate-800 text-2xl font-bold">Notas clínicas</h1>
             <p className="text-slate-500 text-sm mt-0.5">{paciente?.nombre}</p>
           </div>
-          <button
-            onClick={() => { limpiarFormulario(); setModalAbierto(true); }}
-            className="bg-[#1A6BFF] hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
-          >
-            + Nueva nota
-          </button>
+          {puedeEscribirNotas && (
+            <button
+              onClick={() => { limpiarFormulario(); setModalAbierto(true); }}
+              className="bg-[#1A6BFF] hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors"
+            >
+              + Nueva nota
+            </button>
+          )}
         </div>
+
+        {!puedeEscribirNotas && (
+          <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 mb-6">
+            <p className="text-[#1A6BFF] text-xs">
+              📋 Estas notas las escribe el equipo médico y terapéutico. Si quieres llevar tu propio registro, usa la <Link href={`/paciente/${pacienteId}/bitacora-familiar`} className="underline font-semibold">Bitácora familiar</Link>.
+            </p>
+          </div>
+        )}
 
         {/* Filtros */}
         <div className="flex gap-2 mb-6 flex-wrap">
@@ -282,12 +296,14 @@ export default function NotasPage() {
             <p className="text-slate-500 text-sm">
               {filtroTipo === "todos" ? "Aún no hay notas clínicas." : "No hay notas de este tipo."}
             </p>
-            <button
-              onClick={() => { limpiarFormulario(); setModalAbierto(true); }}
-              className="mt-4 text-[#1A6BFF] text-sm hover:underline"
-            >
-              Agregar la primera →
-            </button>
+            {puedeEscribirNotas && (
+              <button
+                onClick={() => { limpiarFormulario(); setModalAbierto(true); }}
+                className="mt-4 text-[#1A6BFF] text-sm hover:underline"
+              >
+                Agregar la primera →
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-col gap-4">
@@ -382,7 +398,7 @@ export default function NotasPage() {
                               Esta nota no puede ser modificada · NOM-004-SSA3-2012
                             </p>
                           </div>
-                        ) : esAutor ? (
+                        ) : (puedeEscribirNotas && esAutor) ? (
                           <button
                             onClick={() => setModalFirma(nota)}
                             className="mt-2 w-full border border-[#1A6BFF] text-[#1A6BFF] text-sm font-semibold py-2.5 rounded-xl hover:bg-blue-50 transition-colors"
@@ -403,7 +419,7 @@ export default function NotasPage() {
       </div>
 
       {/* Modal nueva nota SOAP */}
-      {modalAbierto && (
+      {modalAbierto && puedeEscribirNotas && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-xl max-h-[90vh] overflow-y-auto">
             <h2 className="text-slate-800 text-lg font-bold mb-5">Nueva nota clínica</h2>
