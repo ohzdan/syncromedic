@@ -6,6 +6,7 @@ import Link from "next/link";
 
 export default function NuevoPaciente() {
   const [nombre, setNombre] = useState("");
+  const [apodo, setApodo] = useState("");
   const [dia, setDia] = useState("");
   const [mes, setMes] = useState("");
   const [anio, setAnio] = useState("");
@@ -32,6 +33,7 @@ export default function NuevoPaciente() {
     const { data, error } = await supabase.from("pacientes").insert({
       familia_id: user.id,
       nombre,
+      apodo: apodo.trim() || null,
       fecha_nacimiento: fechaNacimiento,
       sexo: sexo || null,
     }).select();
@@ -81,6 +83,18 @@ export default function NuevoPaciente() {
               onChange={(e) => setNombre(e.target.value)}
               className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder:text-slate-400 text-sm focus:outline-none focus:border-[#1A6BFF] transition-colors"
             />
+          </div>
+
+          <div>
+            <label className="text-slate-600 text-sm mb-1 block">Apodo (opcional)</label>
+            <input
+              type="text"
+              placeholder="Ej: Sofi"
+              value={apodo}
+              onChange={(e) => setApodo(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 placeholder:text-slate-400 text-sm focus:outline-none focus:border-[#1A6BFF] transition-colors"
+            />
+            <p className="text-slate-400 text-xs mt-1">Se usa para personalizar secciones como "Equipo de {"{apodo}"}"</p>
           </div>
 
           <div>
