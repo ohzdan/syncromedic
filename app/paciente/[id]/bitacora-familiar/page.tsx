@@ -164,14 +164,14 @@ export default function BitacoraFamiliarPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+        <Link href="/dashboard" className="flex items-center gap-2 no-underline">
           <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
             <span className="text-white font-bold text-xs">S</span>
           </div>
           <span className="text-slate-800 font-bold text-lg tracking-tight">
             Syncro<span className="text-[#00C97A]">Medic</span>
           </span>
-        </div>
+        </Link>
         <Link href={`/paciente/${pacienteId}`} className="text-slate-400 hover:text-slate-600 text-sm">
           ← Regresar
         </Link>
