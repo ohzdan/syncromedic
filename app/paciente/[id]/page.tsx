@@ -9,6 +9,7 @@ type Rol = 'familia' | 'medico' | 'terapeuta' | 'centro_terapias' | 'escuela' | 
 export default function ExpedientePaciente() {
   const [paciente, setPaciente] = useState<any>(null);
   const [rol, setRol] = useState<Rol>('familia');
+  const [permisosEscuela, setPermisosEscuela] = useState({ puede_ver_medicamentos: false, puede_ver_timeline: false });
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const params = useParams();
@@ -25,7 +26,23 @@ export default function ExpedientePaciente() {
         .eq('id', user.id)
         .single();
 
-      setRol((userData?.role || user.user_metadata?.role || 'familia') as Rol);
+      const rolActual = (userData?.role || user.user_metadata?.role || 'familia') as Rol;
+      setRol(rolActual);
+
+      if (rolActual === 'escuela') {
+        const { data: acceso } = await supabase
+          .from('expediente_accesos')
+          .select('puede_ver_medicamentos, puede_ver_timeline')
+          .eq('paciente_id', params.id)
+          .eq('usuario_id', user.id)
+          .eq('estado', 'activo')
+          .single();
+
+        setPermisosEscuela({
+          puede_ver_medicamentos: acceso?.puede_ver_medicamentos ?? false,
+          puede_ver_timeline: acceso?.puede_ver_timeline ?? false,
+        });
+      }
 
       const { data } = await supabase
         .from("pacientes").select("*").eq("id", params.id).single();
@@ -54,6 +71,10 @@ export default function ExpedientePaciente() {
   const esFamilia = rol === 'familia';
   const esEscuela = rol === 'escuela';
   const esProfesionalClinico = !esFamilia && !esEscuela; // medico, terapeuta, centro_terapias, admin
+
+  // La escuela ve medicamentos/timeline solo si la familia le dio ese permiso específico
+  const escuelaVeMedicamentos = esEscuela && permisosEscuela.puede_ver_medicamentos;
+  const escuelaVeTimeline = esEscuela && permisosEscuela.puede_ver_timeline;
 
   return (
     <main className="min-h-screen bg-slate-50">
@@ -157,6 +178,14 @@ export default function ExpedientePaciente() {
             </Link>
           )}
 
+          {escuelaVeMedicamentos && (
+            <Link href={`/paciente/${params.id}/medicamentos`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">💊</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Medicamentos</h2>
+              <p className="text-slate-500 text-sm">Medicamentos activos (solo lectura)</p>
+            </Link>
+          )}
+
           {(esFamilia || esProfesionalClinico) && (
             <Link href={`/paciente/${params.id}/documentos`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
               <p className="text-2xl mb-3">📁</p>
@@ -166,6 +195,14 @@ export default function ExpedientePaciente() {
           )}
 
           {(esFamilia || esProfesionalClinico) && (
+            <Link href={`/paciente/${params.id}/timeline`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
+              <p className="text-2xl mb-3">⏱️</p>
+              <h2 className="text-slate-900 font-semibold mb-1">Timeline médico</h2>
+              <p className="text-slate-500 text-sm">Historial cronológico de todos los eventos del expediente</p>
+            </Link>
+          )}
+
+          {escuelaVeTimeline && (
             <Link href={`/paciente/${params.id}/timeline`} className="bg-white border border-slate-200 rounded-2xl p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer block no-underline">
               <p className="text-2xl mb-3">⏱️</p>
               <h2 className="text-slate-900 font-semibold mb-1">Timeline médico</h2>
@@ -201,7 +238,7 @@ export default function ExpedientePaciente() {
 
         {esEscuela && (
           <p className="text-slate-400 text-xs mt-6 text-center">
-            Como escuela, tu acceso está limitado a las recomendaciones para el entorno escolar.
+            Como escuela, tu acceso está limitado a las recomendaciones para el entorno escolar{(permisosEscuela.puede_ver_medicamentos || permisosEscuela.puede_ver_timeline) ? ', más lo que la familia te haya habilitado arriba.' : '.'}
           </p>
         )}
 
