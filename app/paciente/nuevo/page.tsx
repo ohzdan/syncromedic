@@ -86,7 +86,7 @@ export default function NuevoPaciente() {
           </div>
 
           <div>
-            <label className="text-slate-600 text-sm mb-1 block">Apodo (opcional)</label>
+            <label className="text-slate-600 text-sm mb-1 block">Cómo le dicen en casa (opcional)</label>
             <input
               type="text"
               placeholder="Ej: Sofi"

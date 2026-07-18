@@ -361,7 +361,7 @@ export default function ExpedientePaciente() {
                     value={apodoInput}
                     onChange={(e) => setApodoInput(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') guardarApodo(); if (e.key === 'Escape') { setApodoInput(paciente.apodo || ""); setEditandoApodo(false); } }}
-                    placeholder="Apodo (ej: Sofi)"
+                    placeholder="Cómo le dicen en casa (ej: Sofi)"
                     className="border border-slate-200 rounded-lg px-2.5 py-1 text-sm text-slate-800 focus:outline-none focus:border-[#1A6BFF] transition-colors"
                   />
                   <button onClick={guardarApodo} disabled={guardandoApodo} className="text-[#1A6BFF] text-xs font-semibold disabled:opacity-50">
@@ -381,7 +381,7 @@ export default function ExpedientePaciente() {
                   )}
                   {esFamilia && (
                     <button onClick={() => setEditandoApodo(true)} className="text-slate-400 hover:text-[#1A6BFF] text-xs transition-colors">
-                      {paciente.apodo ? "editar apodo" : "+ agregar apodo"}
+                      {paciente.apodo ? "editar cómo le dicen" : "+ agregar cómo le dicen"}
                     </button>
                   )}
                 </p>
