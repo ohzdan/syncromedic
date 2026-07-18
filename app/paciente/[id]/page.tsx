@@ -668,7 +668,7 @@ export default function ExpedientePaciente() {
 
                   <div className="border-t border-slate-100" />
 
-                  {/* Evacuación: fecha, pregunta y nota siempre visibles; consistencia y foto solo si aplica */}
+                  {/* Evacuación: fecha, foto, pregunta, observación y nota — todo siempre visible */}
                   <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-3">
                     <div>
                       <label className="text-slate-500 text-xs mb-1 block font-medium">Fecha de la evacuación</label>
@@ -677,7 +677,7 @@ export default function ExpedientePaciente() {
                     </div>
 
                     <div>
-                      <span className="text-slate-700 text-sm font-medium block mb-2">💩 ¿Tuvo evacuación?</span>
+                      <span className="text-slate-700 text-sm font-medium block mb-2">💩 ¿Hizo popo durante el día?</span>
                       <div className="grid grid-cols-2 gap-2">
                         <button type="button" onClick={() => setDiarioTuvoEvacuacion(true)}
                           className={`py-2.5 rounded-xl border text-sm font-medium transition-colors ${diarioTuvoEvacuacion ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>
@@ -691,39 +691,35 @@ export default function ExpedientePaciente() {
                       <p className="text-slate-400 text-[11px] mt-1">En caso de no registrar se mostrará como un "No".</p>
                     </div>
 
-                    {diarioTuvoEvacuacion && (
-                      <div className="flex flex-col gap-4 bg-white rounded-xl p-4 border border-slate-200">
-                        <div>
-                          <label className="text-slate-500 text-xs mb-2 block font-medium">Consistencia</label>
-                          <div className="grid grid-cols-2 gap-2">
-                            {(Object.keys(CONSISTENCIA_LABELS) as Consistencia[]).map(c => (
-                              <button
-                                key={c}
-                                type="button"
-                                onClick={() => setDiarioConsistencia(c)}
-                                className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors bg-white ${diarioConsistencia === c ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
-                              >
-                                {CONSISTENCIA_LABELS[c]}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-slate-500 text-xs mb-1 block font-medium">Foto (opcional)</label>
-                          <div onClick={() => fotoEvacInputRef.current?.click()}
-                            className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#1A6BFF] transition-colors bg-white">
-                            {previewEvacuacion ? (
-                              <img src={previewEvacuacion} alt="preview" className="max-h-32 mx-auto rounded-lg object-contain" />
-                            ) : (
-                              <p className="text-slate-400 text-sm">📷 Toca para adjuntar foto</p>
-                            )}
-                          </div>
-                          <input ref={fotoEvacInputRef} type="file" accept=".jpg,.jpeg,.png,.webp"
-                            onChange={onFotoEvacuacionSeleccionada} className="hidden" />
-                        </div>
+                    <div>
+                      <label className="text-slate-500 text-xs mb-1 block font-medium">Foto (opcional)</label>
+                      <div onClick={() => fotoEvacInputRef.current?.click()}
+                        className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#1A6BFF] transition-colors bg-white">
+                        {previewEvacuacion ? (
+                          <img src={previewEvacuacion} alt="preview" className="max-h-32 mx-auto rounded-lg object-contain" />
+                        ) : (
+                          <p className="text-slate-400 text-sm">📷 Toca para adjuntar foto</p>
+                        )}
                       </div>
-                    )}
+                      <input ref={fotoEvacInputRef} type="file" accept=".jpg,.jpeg,.png,.webp"
+                        onChange={onFotoEvacuacionSeleccionada} className="hidden" />
+                    </div>
+
+                    <div>
+                      <label className="text-slate-500 text-xs mb-2 block font-medium">Según tu observación:</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(Object.keys(CONSISTENCIA_LABELS) as Consistencia[]).map(c => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setDiarioConsistencia(c)}
+                            className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors bg-white ${diarioConsistencia === c ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                          >
+                            {CONSISTENCIA_LABELS[c]}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
 
                     <div>
                       <label className="text-slate-500 text-xs mb-1 block font-medium">Nota (opcional)</label>
