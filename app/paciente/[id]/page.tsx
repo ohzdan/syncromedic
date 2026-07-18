@@ -644,15 +644,20 @@ export default function ExpedientePaciente() {
                       <input type="date" value={fechaPipi} max={hoyISO()} onChange={e => setFechaPipi(e.target.value)}
                         className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                     </div>
-                    <label className="flex items-center gap-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={diarioPipi}
-                        onChange={e => setDiarioPipi(e.target.checked)}
-                        className="w-4 h-4 accent-[#1A6BFF]"
-                      />
-                      <span className="text-slate-700 text-sm font-medium">💧 ¿Hizo pipi en la noche?</span>
-                    </label>
+                    <div>
+                      <span className="text-slate-700 text-sm font-medium block mb-2">💧 ¿Hizo pipi en la noche?</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setDiarioPipi(true)}
+                          className={`py-2.5 rounded-xl border text-sm font-medium transition-colors ${diarioPipi ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>
+                          Sí
+                        </button>
+                        <button type="button" onClick={() => setDiarioPipi(false)}
+                          className={`py-2.5 rounded-xl border text-sm font-medium transition-colors ${!diarioPipi ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>
+                          No
+                        </button>
+                      </div>
+                      <p className="text-slate-400 text-[11px] mt-1">En caso de no registrar se mostrará como un "No".</p>
+                    </div>
                     <div>
                       <label className="text-slate-500 text-xs mb-1 block font-medium">Nota (opcional)</label>
                       <textarea value={notaSueno} onChange={e => setNotaSueno(e.target.value)}
@@ -671,15 +676,20 @@ export default function ExpedientePaciente() {
                         className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                     </div>
 
-                    <label className="flex items-center gap-2.5 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={diarioTuvoEvacuacion}
-                        onChange={e => setDiarioTuvoEvacuacion(e.target.checked)}
-                        className="w-4 h-4 accent-[#1A6BFF]"
-                      />
-                      <span className="text-slate-700 text-sm font-medium">💩 ¿Tuvo evacuación?</span>
-                    </label>
+                    <div>
+                      <span className="text-slate-700 text-sm font-medium block mb-2">💩 ¿Tuvo evacuación?</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button type="button" onClick={() => setDiarioTuvoEvacuacion(true)}
+                          className={`py-2.5 rounded-xl border text-sm font-medium transition-colors ${diarioTuvoEvacuacion ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>
+                          Sí
+                        </button>
+                        <button type="button" onClick={() => setDiarioTuvoEvacuacion(false)}
+                          className={`py-2.5 rounded-xl border text-sm font-medium transition-colors ${!diarioTuvoEvacuacion ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 bg-white text-slate-600 hover:border-slate-300"}`}>
+                          No
+                        </button>
+                      </div>
+                      <p className="text-slate-400 text-[11px] mt-1">En caso de no registrar se mostrará como un "No".</p>
+                    </div>
 
                     {diarioTuvoEvacuacion && (
                       <div className="flex flex-col gap-4 bg-white rounded-xl p-4 border border-slate-200">
