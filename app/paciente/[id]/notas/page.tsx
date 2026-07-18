@@ -13,6 +13,15 @@ const TIPOS_NOTA = [
   { id: "interconsulta", label: "Interconsulta", emoji: "🔄" },
 ];
 
+// Qué tipos de nota puede elegir cada rol al crear una nota nueva.
+// El médico solo ve lo que vivió en su consulta; el terapeuta solo su sesión.
+// Los demás roles clínicos (centro_terapias, admin) conservan el catálogo completo.
+function tiposNotaPorRol(role: string | undefined) {
+  if (role === "medico") return TIPOS_NOTA.filter(t => t.id === "consulta");
+  if (role === "terapeuta") return TIPOS_NOTA.filter(t => t.id === "sesion_terapia");
+  return TIPOS_NOTA;
+}
+
 type Nota = {
   id: string;
   tipo_nota: string;
@@ -105,7 +114,9 @@ export default function NotasPage() {
   }
 
   function limpiarFormulario() {
-    setTipo(""); setMotivo(""); setSubjetivo(""); setObjetivo("");
+    const disponibles = tiposNotaPorRol(usuario?.role);
+    setTipo(disponibles.length === 1 ? disponibles[0].id : "");
+    setMotivo(""); setSubjetivo(""); setObjetivo("");
     setPlan(""); setIndicaciones(""); setProximaCita("");
     setImagen(null); setPreview(null); setError("");
     setFechaConsulta(new Date().toISOString().split("T")[0]);
@@ -425,20 +436,22 @@ export default function NotasPage() {
             <h2 className="text-slate-800 text-lg font-bold mb-5">Nueva nota clínica</h2>
             <div className="flex flex-col gap-4">
 
-              <div>
-                <label className="text-slate-500 text-xs mb-2 block font-medium">Tipo de nota *</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {TIPOS_NOTA.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => setTipo(t.id)}
-                      className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors text-left ${tipo === t.id ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
-                    >
-                      {t.emoji} {t.label}
-                    </button>
-                  ))}
+              {tiposNotaPorRol(usuario?.role).length > 1 && (
+                <div>
+                  <label className="text-slate-500 text-xs mb-2 block font-medium">Tipo de nota *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {tiposNotaPorRol(usuario?.role).map(t => (
+                      <button
+                        key={t.id}
+                        onClick={() => setTipo(t.id)}
+                        className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors text-left ${tipo === t.id ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                      >
+                        {t.emoji} {t.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <label className="text-slate-500 text-xs mb-1 block font-medium">Fecha de la consulta *</label>
