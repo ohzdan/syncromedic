@@ -14,6 +14,39 @@ const CONSISTENCIA_LABELS: Record<Consistencia, string> = {
   diarrea: 'Diarrea',
 }
 
+const MOTIVOS = [
+  { value: 'terror_nocturno', label: 'Terror nocturno' },
+  { value: 'pesadilla', label: 'Pesadilla' },
+  { value: 'hambre_sed', label: 'Hambre o sed' },
+  { value: 'bano_panal', label: 'Necesidad de ir al baño / pañal' },
+  { value: 'dolor', label: 'Dolor o malestar físico' },
+  { value: 'enfermedad', label: 'Enfermedad (fiebre, tos, congestión)' },
+  { value: 'convulsion', label: 'Convulsión' },
+  { value: 'ruido_ambiental', label: 'Ruido o estímulo ambiental' },
+  { value: 'ansiedad_separacion', label: 'Ansiedad de separación' },
+  { value: 'sin_causa', label: 'Sin causa aparente' },
+]
+
+function horaHHMM(iso: string) {
+  const d = new Date(iso)
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/**
+ * Construye un timestamp ISO a partir de una fecha base y una hora (HH:MM).
+ * Si se da una hora de referencia y la hora nueva es "menor" en el reloj,
+ * asumimos que cruzó la medianoche y sumamos un día.
+ */
+function construirFechaHora(fechaBase: string, horaHHMM_: string, horaReferencia?: string) {
+  let fecha = fechaBase
+  if (horaReferencia && horaHHMM_ < horaReferencia) {
+    const d = new Date(fechaBase + 'T12:00:00')
+    d.setDate(d.getDate() + 1)
+    fecha = d.toISOString().slice(0, 10)
+  }
+  return `${fecha}T${horaHHMM_}:00`
+}
+
 function hoyISO() {
   return new Date().toISOString().split('T')[0]
 }
@@ -56,6 +89,7 @@ export default function ExpedientePaciente() {
   const [previewEvacuacion, setPreviewEvacuacion] = useState<string | null>(null);
   const [notaSueno, setNotaSueno] = useState('');
   const [notaEvacuacion, setNotaEvacuacion] = useState('');
+  const [despertares, setDespertares] = useState<{ horaDespierto: string; horaVolvio: string; motivo: string; nota: string }[]>([]);
   const [guardandoDiario, setGuardandoDiario] = useState(false);
   const [diarioError, setDiarioError] = useState('');
   const [diarioExito, setDiarioExito] = useState(false);
@@ -146,6 +180,7 @@ export default function ExpedientePaciente() {
     setPreviewEvacuacion(null);
     setNotaSueno('');
     setNotaEvacuacion('');
+    setDespertares([]);
     setDiarioError('');
     setDiarioExito(false);
     setConflictoSueno(false);
@@ -159,6 +194,18 @@ export default function ExpedientePaciente() {
     if (!file) return;
     setFotoEvacuacion(file);
     setPreviewEvacuacion(URL.createObjectURL(file));
+  }
+
+  function agregarDespertar() {
+    setDespertares(prev => [...prev, { horaDespierto: '03:00', horaVolvio: '03:10', motivo: 'sin_causa', nota: '' }]);
+  }
+
+  function actualizarDespertar(index: number, campo: 'horaDespierto' | 'horaVolvio' | 'motivo' | 'nota', valor: string) {
+    setDespertares(prev => prev.map((d, i) => i === index ? { ...d, [campo]: valor } : d));
+  }
+
+  function quitarDespertar(index: number) {
+    setDespertares(prev => prev.filter((_, i) => i !== index));
   }
 
   async function verificarYGuardar() {
@@ -222,7 +269,7 @@ export default function ExpedientePaciente() {
         .from('bitacora_registros')
         .update({ deleted_at: ahoraISO })
         .eq('paciente_id', pacienteId)
-        .in('tipo', ['sueno_inicio', 'sueno_fin'])
+        .in('tipo', ['sueno_inicio', 'sueno_fin', 'sueno_despertar'])
         .eq('noche_fecha', fechaDespertar)
         .is('deleted_at', null);
     }
@@ -268,6 +315,25 @@ export default function ExpedientePaciente() {
       registrado_por: user.id,
     });
 
+    // 2c. Despertares nocturnos: uno por cada entrada agregada, ligados a la misma noche
+    let errDespertares: any = null;
+    for (const d of despertares) {
+      const horaInicioIso = construirFechaHora(fechaDormir, d.horaDespierto, horaDormir);
+      const fechaBaseVolvio = horaInicioIso.slice(0, 10);
+      const horaFinIso = d.horaVolvio ? construirFechaHora(fechaBaseVolvio, d.horaVolvio, d.horaDespierto) : null;
+      const { error } = await supabase.from('bitacora_registros').insert({
+        paciente_id: pacienteId,
+        tipo: 'sueno_despertar',
+        noche_fecha: fechaDespertar,
+        hora_inicio: horaInicioIso,
+        hora_fin: horaFinIso,
+        motivo: d.motivo || null,
+        nota: d.nota || null,
+        registrado_por: user.id,
+      });
+      if (error) errDespertares = error;
+    }
+
     // 3. Evacuación (opcional, con foto)
     let errEvac = null;
     if (diarioTuvoEvacuacion) {
@@ -295,7 +361,7 @@ export default function ExpedientePaciente() {
       errEvac = res.error;
     }
 
-    if (errInicio || errFin || errPipi || errEvac) {
+    if (errInicio || errFin || errPipi || errDespertares || errEvac) {
       setDiarioError('Algo no se guardó correctamente. Revisa e intenta de nuevo.');
       setGuardandoDiario(false);
       return;
@@ -634,6 +700,43 @@ export default function ExpedientePaciente() {
                           className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                       </div>
                       <p className="text-slate-400 text-[11px] mt-1">Esta fecha es la que se usa para contar las horas dormidas.</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="text-slate-500 text-xs block font-medium">Despertares nocturnos</label>
+                        <button type="button" onClick={agregarDespertar} className="text-[#1A6BFF] text-xs font-semibold">+ Agregar</button>
+                      </div>
+                      {despertares.length === 0 && (
+                        <p className="text-slate-400 text-[11px]">Ninguno registrado. Si no agregas ninguno, se asume que durmió toda la noche sin despertar.</p>
+                      )}
+                      {despertares.map((d, i) => (
+                        <div key={i} className="bg-white border border-slate-200 rounded-xl p-3 mb-2 flex flex-col gap-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-600 text-xs font-semibold">Despertar {i + 1}</span>
+                            <button type="button" onClick={() => quitarDespertar(i)} className="text-red-400 text-xs font-semibold">Quitar</button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-slate-400 text-[11px] block mb-0.5">Se despertó</label>
+                              <input type="time" value={d.horaDespierto} onChange={e => actualizarDespertar(i, 'horaDespierto', e.target.value)}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                            </div>
+                            <div>
+                              <label className="text-slate-400 text-[11px] block mb-0.5">Volvió a dormir</label>
+                              <input type="time" value={d.horaVolvio} onChange={e => actualizarDespertar(i, 'horaVolvio', e.target.value)}
+                                className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                            </div>
+                          </div>
+                          <select value={d.motivo} onChange={e => actualizarDespertar(i, 'motivo', e.target.value)}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:border-[#1A6BFF]">
+                            {MOTIVOS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                          </select>
+                          <textarea rows={2} value={d.nota} onChange={e => actualizarDespertar(i, 'nota', e.target.value)}
+                            placeholder="Nota (opcional)"
+                            className="w-full border border-slate-200 rounded-lg px-2 py-2 text-sm resize-none focus:outline-none focus:border-[#1A6BFF]" />
+                        </div>
+                      ))}
                     </div>
                   </div>
 

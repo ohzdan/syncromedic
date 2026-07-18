@@ -4,11 +4,29 @@ import { createClient } from "@/lib/supabase";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 
+// Mismo catálogo que la pantalla de Documentos, para que lo que se suba aquí
+// aparezca clasificado igual en Documentos y en el Timeline.
+const CATEGORIAS = [
+  { id: "laboratorio", label: "Estudio de laboratorio", emoji: "🧪" },
+  { id: "imagen", label: "Estudio de imagen", emoji: "🔬" },
+  { id: "receta", label: "Receta", emoji: "💊" },
+  { id: "otro", label: "Otro", emoji: "📄" },
+];
+
+const CATEGORIA_A_TIPO_ENUM: Record<string, string> = {
+  laboratorio: "analisis",
+  imagen: "estudio",
+  receta: "receta",
+  otro: "otro",
+};
+
 type Entrada = {
   id: string;
   fecha: string;
   contenido: string;
   imagen_path: string | null;
+  categoria: string | null;
+  documento_id: string | null;
   created_at: string;
   autor_id: string;
 };
@@ -32,6 +50,7 @@ export default function BitacoraFamiliarPage() {
   const [contenido, setContenido] = useState("");
   const [imagen, setImagen] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [categoria, setCategoria] = useState("");
 
   const [entradaVisor, setEntradaVisor] = useState<Entrada | null>(null);
   const [urlVisor, setUrlVisor] = useState<string | null>(null);
@@ -72,7 +91,7 @@ export default function BitacoraFamiliarPage() {
   }
 
   function limpiarFormulario() {
-    setContenido(""); setImagen(null); setPreview(null); setError("");
+    setContenido(""); setImagen(null); setPreview(null); setError(""); setCategoria("");
     setFecha(new Date().toISOString().split("T")[0]);
   }
 
@@ -88,10 +107,18 @@ export default function BitacoraFamiliarPage() {
       setError("Escribe algo antes de guardar.");
       return;
     }
+    if (imagen && !categoria) {
+      setError("Selecciona qué tipo de archivo estás adjuntando.");
+      return;
+    }
     setGuardando(true);
     setError("");
 
-    let imagenPath = null;
+    const { data: { user } } = await supabase.auth.getUser();
+
+    let imagenPath: string | null = null;
+    let documentoId: string | null = null;
+
     if (imagen) {
       const ext = imagen.name.split(".").pop();
       const path = `${pacienteId}/bitacora-familiar/${Date.now()}.${ext}`;
@@ -104,6 +131,27 @@ export default function BitacoraFamiliarPage() {
         return;
       }
       imagenPath = path;
+
+      // Con categoría seleccionada, la imagen también se registra como documento real
+      // (mismo patrón que la pantalla de Documentos), para que aparezca ahí y en el Timeline.
+      const nombreDoc = contenido.trim().slice(0, 60) || (CATEGORIAS.find(c => c.id === categoria)?.label ?? "Adjunto de bitácora");
+      const { data: docCreado, error: docError } = await supabase.from("documentos").insert({
+        paciente_id: pacienteId,
+        nombre: nombreDoc,
+        categoria: categoria,
+        archivo_path: imagenPath,
+        archivo_url: imagenPath,
+        tipo_archivo: imagen.type,
+        subido_por: user!.id,
+        tipo: CATEGORIA_A_TIPO_ENUM[categoria] || "otro",
+      }).select("id").single();
+
+      if (docError) {
+        setError("La entrada se puede guardar, pero el documento no se pudo clasificar. Intenta de nuevo.");
+        setGuardando(false);
+        return;
+      }
+      documentoId = docCreado?.id ?? null;
     }
 
     const { error: dbError } = await supabase.from("bitacora_familiar").insert({
@@ -112,6 +160,8 @@ export default function BitacoraFamiliarPage() {
       fecha,
       contenido: contenido.trim(),
       imagen_path: imagenPath,
+      categoria: imagen ? categoria : null,
+      documento_id: documentoId,
     });
 
     if (dbError) {
@@ -126,12 +176,19 @@ export default function BitacoraFamiliarPage() {
     setGuardando(false);
   }
 
-  async function eliminarEntrada(id: string) {
+  async function eliminarEntrada(entrada: Entrada) {
     if (!confirm("¿Eliminar esta entrada de la bitácora?")) return;
+    const ahora = new Date().toISOString();
     await supabase
       .from("bitacora_familiar")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id);
+      .update({ deleted_at: ahora })
+      .eq("id", entrada.id);
+    if (entrada.documento_id) {
+      await supabase
+        .from("documentos")
+        .update({ deleted_at: ahora })
+        .eq("id", entrada.documento_id);
+    }
     await cargarEntradas();
   }
 
@@ -181,7 +238,7 @@ export default function BitacoraFamiliarPage() {
         <div className="flex items-center justify-between mb-2">
           <div>
             <h1 className="text-slate-800 text-2xl font-bold">Bitácora familiar</h1>
-            <p className="text-slate-500 text-sm mt-0.5">Registro libre de {nombreParaTitulo}</p>
+            <p className="text-slate-500 text-sm mt-0.5">Registro de {nombreParaTitulo}</p>
           </div>
           {esFamilia && (
             <button
@@ -194,7 +251,7 @@ export default function BitacoraFamiliarPage() {
         </div>
 
         <p className="text-slate-400 text-xs mb-6">
-          Este es tu espacio para anotar lo que observas día a día. Es distinto de las notas clínicas del equipo médico — aquí no se requiere formato SOAP ni firma.
+          Aquí anotas consultas, estudios, terapias o cualquier cosa relacionada con {nombreParaTitulo} — la diferencia con las notas clínicas del equipo médico es que aquí el formato es simple, sin SOAP ni firma. Si adjuntas un archivo y lo clasificas, también aparecerá en Documentos y en el Timeline.
         </p>
 
         {entradas.length === 0 ? (
@@ -215,10 +272,17 @@ export default function BitacoraFamiliarPage() {
             {entradas.map((entrada) => (
               <div key={entrada.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
                 <div className="flex items-start justify-between gap-4">
-                  <p className="text-slate-400 text-xs font-medium">{formatFecha(entrada.fecha)}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-slate-400 text-xs font-medium">{formatFecha(entrada.fecha)}</p>
+                    {entrada.categoria && (
+                      <span className="text-[10px] font-semibold text-[#1A6BFF] bg-blue-50 px-2 py-0.5 rounded-full">
+                        {CATEGORIAS.find(c => c.id === entrada.categoria)?.emoji} {CATEGORIAS.find(c => c.id === entrada.categoria)?.label}
+                      </span>
+                    )}
+                  </div>
                   {esFamilia && entrada.autor_id === usuario.id && (
                     <button
-                      onClick={() => eliminarEntrada(entrada.id)}
+                      onClick={() => eliminarEntrada(entrada)}
                       className="text-red-300 hover:text-red-500 text-xs transition-colors"
                     >
                       Eliminar
@@ -256,7 +320,7 @@ export default function BitacoraFamiliarPage() {
               <div>
                 <label className="text-slate-500 text-xs mb-1 block font-medium">¿Qué quieres anotar? *</label>
                 <textarea value={contenido} onChange={e => setContenido(e.target.value)}
-                  placeholder="Hoy notamos que..." rows={5}
+                  placeholder="Ej. tuvo consulta con el neurólogo y..., le hicimos un estudio de..., en terapia trabajaron..." rows={5}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
               </div>
 
@@ -273,6 +337,25 @@ export default function BitacoraFamiliarPage() {
                 <input ref={fileInputRef} type="file" accept=".jpg,.jpeg,.png,.webp"
                   onChange={onImagenSeleccionada} className="hidden" />
               </div>
+
+              {imagen && (
+                <div>
+                  <label className="text-slate-500 text-xs mb-2 block font-medium">¿Qué tipo de archivo es? *</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {CATEGORIAS.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => setCategoria(c.id)}
+                        className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors text-left ${categoria === c.id ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                      >
+                        {c.emoji} {c.label}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-slate-400 text-[11px] mt-1">Al clasificarlo, también aparecerá en Documentos y en el Timeline.</p>
+                </div>
+              )}
 
               {error && <p className="text-red-500 text-sm">{error}</p>}
 

@@ -155,7 +155,8 @@ export default function DocumentosPage() {
 
   async function eliminarDocumento(doc: Documento) {
     if (!confirm(`¿Eliminar "${doc.nombre}"?`)) return;
-    await supabase.storage.from("documentos").remove([doc.archivo_path]);
+    // NOM-004/024: nunca DELETE físico. El archivo se conserva en storage
+    // como parte del rastro de auditoría; solo se marca deleted_at.
     await supabase.from("documentos").update({ deleted_at: new Date().toISOString() }).eq("id", doc.id);
     await cargarDocumentos();
   }
