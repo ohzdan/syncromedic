@@ -613,27 +613,28 @@ export default function ExpedientePaciente() {
 
                 <div className="flex flex-col gap-4">
 
-                  {/* Se durmió: fecha + hora */}
-                  <div>
-                    <label className="text-slate-500 text-xs mb-1 block font-medium">😴 Se durmió</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input type="date" value={fechaDormir} max={hoyISO()} onChange={e => setFechaDormir(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
-                      <input type="time" value={horaDormir} onChange={e => setHoraDormir(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                  {/* Registro de sueño: Se durmió + Despertó, envueltos en una sola caja */}
+                  <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-4">
+                    <div>
+                      <label className="text-slate-500 text-xs mb-1 block font-medium">😴 Se durmió</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input type="date" value={fechaDormir} max={hoyISO()} onChange={e => setFechaDormir(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                        <input type="time" value={horaDormir} onChange={e => setHoraDormir(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Despertó: fecha + hora (esta es la fecha que se usa para el registro) */}
-                  <div>
-                    <label className="text-slate-500 text-xs mb-1 block font-medium">☀️ Despertó</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input type="date" value={fechaDespertar} max={hoyISO()} onChange={e => setFechaDespertar(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
-                      <input type="time" value={horaDespertar} onChange={e => setHoraDespertar(e.target.value)}
-                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                    <div>
+                      <label className="text-slate-500 text-xs mb-1 block font-medium">☀️ Despertó</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input type="date" value={fechaDespertar} max={hoyISO()} onChange={e => setFechaDespertar(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                        <input type="time" value={horaDespertar} onChange={e => setHoraDespertar(e.target.value)}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                      </div>
+                      <p className="text-slate-400 text-[11px] mt-1">Esta fecha es la que se usa para contar las horas dormidas.</p>
                     </div>
-                    <p className="text-slate-400 text-[11px] mt-1">Esta fecha es la que se usa para contar las horas dormidas.</p>
                   </div>
 
                   {/* Pipi nocturno: fecha propia, independiente de la fecha de Despertó */}
@@ -662,62 +663,65 @@ export default function ExpedientePaciente() {
 
                   <div className="border-t border-slate-100" />
 
-                  <label className="flex items-center gap-2.5 bg-slate-50 rounded-xl px-4 py-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={diarioTuvoEvacuacion}
-                      onChange={e => setDiarioTuvoEvacuacion(e.target.checked)}
-                      className="w-4 h-4 accent-[#1A6BFF]"
-                    />
-                    <span className="text-slate-700 text-sm font-medium">💩 ¿Tuvo evacuación?</span>
-                  </label>
-
-                  {diarioTuvoEvacuacion && (
-                    <div className="flex flex-col gap-4 bg-slate-50 rounded-xl p-4 -mt-2">
-                      <div>
-                        <label className="text-slate-500 text-xs mb-1 block font-medium">Fecha de la evacuación</label>
-                        <input type="date" value={fechaEvacuacion} max={hoyISO()} onChange={e => setFechaEvacuacion(e.target.value)}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
-                      </div>
-
-                      <div>
-                        <label className="text-slate-500 text-xs mb-2 block font-medium">Consistencia</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {(Object.keys(CONSISTENCIA_LABELS) as Consistencia[]).map(c => (
-                            <button
-                              key={c}
-                              type="button"
-                              onClick={() => setDiarioConsistencia(c)}
-                              className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors bg-white ${diarioConsistencia === c ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
-                            >
-                              {CONSISTENCIA_LABELS[c]}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="text-slate-500 text-xs mb-1 block font-medium">Foto (opcional)</label>
-                        <div onClick={() => fotoEvacInputRef.current?.click()}
-                          className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#1A6BFF] transition-colors bg-white">
-                          {previewEvacuacion ? (
-                            <img src={previewEvacuacion} alt="preview" className="max-h-32 mx-auto rounded-lg object-contain" />
-                          ) : (
-                            <p className="text-slate-400 text-sm">📷 Toca para adjuntar foto</p>
-                          )}
-                        </div>
-                        <input ref={fotoEvacInputRef} type="file" accept=".jpg,.jpeg,.png,.webp"
-                          onChange={onFotoEvacuacionSeleccionada} className="hidden" />
-                      </div>
-
-                      <div>
-                        <label className="text-slate-500 text-xs mb-1 block font-medium">Nota (opcional)</label>
-                        <textarea value={notaEvacuacion} onChange={e => setNotaEvacuacion(e.target.value)}
-                          placeholder="Algo de la evacuación..." rows={2}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
-                      </div>
+                  {/* Evacuación: fecha, pregunta y nota siempre visibles; consistencia y foto solo si aplica */}
+                  <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-3">
+                    <div>
+                      <label className="text-slate-500 text-xs mb-1 block font-medium">Fecha de la evacuación</label>
+                      <input type="date" value={fechaEvacuacion} max={hoyISO()} onChange={e => setFechaEvacuacion(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
                     </div>
-                  )}
+
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={diarioTuvoEvacuacion}
+                        onChange={e => setDiarioTuvoEvacuacion(e.target.checked)}
+                        className="w-4 h-4 accent-[#1A6BFF]"
+                      />
+                      <span className="text-slate-700 text-sm font-medium">💩 ¿Tuvo evacuación?</span>
+                    </label>
+
+                    {diarioTuvoEvacuacion && (
+                      <div className="flex flex-col gap-4 bg-white rounded-xl p-4 border border-slate-200">
+                        <div>
+                          <label className="text-slate-500 text-xs mb-2 block font-medium">Consistencia</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(Object.keys(CONSISTENCIA_LABELS) as Consistencia[]).map(c => (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => setDiarioConsistencia(c)}
+                                className={`px-3 py-2.5 rounded-xl border text-sm font-medium transition-colors bg-white ${diarioConsistencia === c ? "border-[#1A6BFF] bg-blue-50 text-[#1A6BFF]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                              >
+                                {CONSISTENCIA_LABELS[c]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-slate-500 text-xs mb-1 block font-medium">Foto (opcional)</label>
+                          <div onClick={() => fotoEvacInputRef.current?.click()}
+                            className="border-2 border-dashed border-slate-200 rounded-xl p-4 text-center cursor-pointer hover:border-[#1A6BFF] transition-colors bg-white">
+                            {previewEvacuacion ? (
+                              <img src={previewEvacuacion} alt="preview" className="max-h-32 mx-auto rounded-lg object-contain" />
+                            ) : (
+                              <p className="text-slate-400 text-sm">📷 Toca para adjuntar foto</p>
+                            )}
+                          </div>
+                          <input ref={fotoEvacInputRef} type="file" accept=".jpg,.jpeg,.png,.webp"
+                            onChange={onFotoEvacuacionSeleccionada} className="hidden" />
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="text-slate-500 text-xs mb-1 block font-medium">Nota (opcional)</label>
+                      <textarea value={notaEvacuacion} onChange={e => setNotaEvacuacion(e.target.value)}
+                        placeholder="Algo de la evacuación..." rows={2}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
+                    </div>
+                  </div>
 
                   {diarioError && <p className="text-red-500 text-sm">{diarioError}</p>}
 
