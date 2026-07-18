@@ -48,12 +48,14 @@ export default function ExpedientePaciente() {
   const [fechaDespertar, setFechaDespertar] = useState(hoyISO());
   const [horaDespertar, setHoraDespertar] = useState('06:50');
   const [diarioPipi, setDiarioPipi] = useState(false);
+  const [fechaPipi, setFechaPipi] = useState(hoyISO());
   const [diarioTuvoEvacuacion, setDiarioTuvoEvacuacion] = useState(false);
   const [fechaEvacuacion, setFechaEvacuacion] = useState(sumarDias(hoyISO(), -1));
   const [diarioConsistencia, setDiarioConsistencia] = useState<Consistencia>('normal');
   const [fotoEvacuacion, setFotoEvacuacion] = useState<File | null>(null);
   const [previewEvacuacion, setPreviewEvacuacion] = useState<string | null>(null);
-  const [diarioNota, setDiarioNota] = useState('');
+  const [notaSueno, setNotaSueno] = useState('');
+  const [notaEvacuacion, setNotaEvacuacion] = useState('');
   const [guardandoDiario, setGuardandoDiario] = useState(false);
   const [diarioError, setDiarioError] = useState('');
   const [diarioExito, setDiarioExito] = useState(false);
@@ -136,12 +138,14 @@ export default function ExpedientePaciente() {
     setFechaDespertar(hoyISO());
     setHoraDespertar('06:50');
     setDiarioPipi(false);
+    setFechaPipi(hoyISO());
     setDiarioTuvoEvacuacion(false);
     setFechaEvacuacion(ayer);
     setDiarioConsistencia('normal');
     setFotoEvacuacion(null);
     setPreviewEvacuacion(null);
-    setDiarioNota('');
+    setNotaSueno('');
+    setNotaEvacuacion('');
     setDiarioError('');
     setDiarioExito(false);
     setConflictoSueno(false);
@@ -168,7 +172,8 @@ export default function ExpedientePaciente() {
       .select('id')
       .eq('paciente_id', pacienteId)
       .in('tipo', ['sueno_inicio', 'sueno_fin'])
-      .eq('noche_fecha', fechaDespertar);
+      .eq('noche_fecha', fechaDespertar)
+      .is('deleted_at', null);
 
     // ¿Ya existe una evacuación registrada ese día?
     let evacuacionExistente: any[] = [];
@@ -181,7 +186,8 @@ export default function ExpedientePaciente() {
         .eq('paciente_id', pacienteId)
         .eq('tipo', 'evacuacion')
         .gte('hora_inicio', inicioDia)
-        .lt('hora_inicio', finDia);
+        .lt('hora_inicio', finDia)
+        .is('deleted_at', null);
       evacuacionExistente = data || [];
     }
 
@@ -208,25 +214,29 @@ export default function ExpedientePaciente() {
 
     const pacienteId = params.id as string;
 
-    // Si se va a sobrescribir, primero borrar los registros existentes de esa noche/día
+    // Si se va a sobrescribir, marcar como borrados lógicamente los registros existentes de esa noche/día
+    // (NOM-004/024: nunca DELETE físico, siempre deleted_at)
+    const ahoraISO = new Date().toISOString();
     if (sobrescribirSueno) {
       await supabase
         .from('bitacora_registros')
-        .delete()
+        .update({ deleted_at: ahoraISO })
         .eq('paciente_id', pacienteId)
         .in('tipo', ['sueno_inicio', 'sueno_fin'])
-        .eq('noche_fecha', fechaDespertar);
+        .eq('noche_fecha', fechaDespertar)
+        .is('deleted_at', null);
     }
     if (sobrescribirEvacuacion && diarioTuvoEvacuacion) {
       const inicioDia = `${fechaEvacuacion}T00:00:00`;
       const finDia = `${sumarDias(fechaEvacuacion, 1)}T00:00:00`;
       await supabase
         .from('bitacora_registros')
-        .delete()
+        .update({ deleted_at: ahoraISO })
         .eq('paciente_id', pacienteId)
         .eq('tipo', 'evacuacion')
         .gte('hora_inicio', inicioDia)
-        .lt('hora_inicio', finDia);
+        .lt('hora_inicio', finDia)
+        .is('deleted_at', null);
     }
 
     // 1. Se durmió
@@ -238,13 +248,23 @@ export default function ExpedientePaciente() {
       registrado_por: user.id,
     });
 
-    // 2. Despertar final, con pipi nocturno
+    // 2. Despertar final
     const { error: errFin } = await supabase.from('bitacora_registros').insert({
       paciente_id: pacienteId,
       tipo: 'sueno_fin',
       noche_fecha: fechaDespertar,
       hora_inicio: `${fechaDespertar}T${horaDespertar}:00`,
+      registrado_por: user.id,
+    });
+
+    // 2b. Pipi nocturno: registro propio, con su propia fecha y nota
+    const { error: errPipi } = await supabase.from('bitacora_registros').insert({
+      paciente_id: pacienteId,
+      tipo: 'pipi_nocturno',
+      noche_fecha: fechaPipi,
+      hora_inicio: `${fechaPipi}T12:00:00`,
       pipi_nocturno: diarioPipi,
+      nota: notaSueno || null,
       registrado_por: user.id,
     });
 
@@ -269,13 +289,13 @@ export default function ExpedientePaciente() {
         hora_inicio: `${fechaEvacuacion}T12:00:00`,
         consistencia: diarioConsistencia,
         foto_url: fotoPath,
-        nota: diarioNota || null,
+        nota: notaEvacuacion || null,
         registrado_por: user.id,
       });
       errEvac = res.error;
     }
 
-    if (errInicio || errFin || errEvac) {
+    if (errInicio || errFin || errPipi || errEvac) {
       setDiarioError('Algo no se guardó correctamente. Revisa e intenta de nuevo.');
       setGuardandoDiario(false);
       return;
@@ -616,16 +636,29 @@ export default function ExpedientePaciente() {
                     <p className="text-slate-400 text-[11px] mt-1">Esta fecha es la que se usa para contar las horas dormidas.</p>
                   </div>
 
-                  {/* Pipi nocturno: justo debajo de Despertó, para dejar claro que pertenece a ese día */}
-                  <label className="flex items-center gap-2.5 bg-slate-50 rounded-xl px-4 py-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={diarioPipi}
-                      onChange={e => setDiarioPipi(e.target.checked)}
-                      className="w-4 h-4 accent-[#1A6BFF]"
-                    />
-                    <span className="text-slate-700 text-sm font-medium">💧 ¿Hizo pipi en la noche del {formatFechaCorta(fechaDespertar)}?</span>
-                  </label>
+                  {/* Pipi nocturno: fecha propia, independiente de la fecha de Despertó */}
+                  <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-3">
+                    <div>
+                      <label className="text-slate-500 text-xs mb-1 block font-medium">Fecha del pipi nocturno</label>
+                      <input type="date" value={fechaPipi} max={hoyISO()} onChange={e => setFechaPipi(e.target.value)}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF]" />
+                    </div>
+                    <label className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={diarioPipi}
+                        onChange={e => setDiarioPipi(e.target.checked)}
+                        className="w-4 h-4 accent-[#1A6BFF]"
+                      />
+                      <span className="text-slate-700 text-sm font-medium">💧 ¿Hizo pipi en la noche?</span>
+                    </label>
+                    <div>
+                      <label className="text-slate-500 text-xs mb-1 block font-medium">Nota (opcional)</label>
+                      <textarea value={notaSueno} onChange={e => setNotaSueno(e.target.value)}
+                        placeholder="Algo del sueño o la noche..." rows={2}
+                        className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
+                    </div>
+                  </div>
 
                   <div className="border-t border-slate-100" />
 
@@ -676,15 +709,15 @@ export default function ExpedientePaciente() {
                         <input ref={fotoEvacInputRef} type="file" accept=".jpg,.jpeg,.png,.webp"
                           onChange={onFotoEvacuacionSeleccionada} className="hidden" />
                       </div>
+
+                      <div>
+                        <label className="text-slate-500 text-xs mb-1 block font-medium">Nota (opcional)</label>
+                        <textarea value={notaEvacuacion} onChange={e => setNotaEvacuacion(e.target.value)}
+                          placeholder="Algo de la evacuación..." rows={2}
+                          className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
+                      </div>
                     </div>
                   )}
-
-                  <div>
-                    <label className="text-slate-500 text-xs mb-1 block font-medium">Nota (opcional)</label>
-                    <textarea value={diarioNota} onChange={e => setDiarioNota(e.target.value)}
-                      placeholder="Algo que quieras anotar del día..." rows={2}
-                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-slate-800 text-sm focus:outline-none focus:border-[#1A6BFF] resize-none" />
-                  </div>
 
                   {diarioError && <p className="text-red-500 text-sm">{diarioError}</p>}
 

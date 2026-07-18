@@ -129,6 +129,7 @@ export default function BitacoraSuenoPage() {
       .eq('paciente_id', pacienteId)
       .eq('noche_fecha', fecha)
       .in('tipo', ['sueno_inicio', 'sueno_despertar', 'sueno_fin'])
+      .is('deleted_at', null)
       .order('hora_inicio', { ascending: true })
     setRegistros(data || [])
   }
@@ -143,6 +144,7 @@ export default function BitacoraSuenoPage() {
       .select('tipo, hora_inicio, hora_fin, noche_fecha')
       .eq('paciente_id', pacienteId)
       .in('tipo', ['sueno_inicio', 'sueno_despertar', 'sueno_fin'])
+      .is('deleted_at', null)
       .gte('noche_fecha', desde.toISOString().slice(0, 10))
       .order('noche_fecha', { ascending: true })
 

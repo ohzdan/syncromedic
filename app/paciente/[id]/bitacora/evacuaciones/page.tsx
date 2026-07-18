@@ -134,6 +134,7 @@ export default function BitacoraEvacuacionesPage() {
       .eq('paciente_id', pacienteId)
       .eq('tipo', 'evacuacion')
       .is('foto_url', null)
+      .is('deleted_at', null)
       .order('hora_inicio', { ascending: false })
       .range(offset, offset + LISTA_PAGE - 1)
 
@@ -155,6 +156,7 @@ export default function BitacoraEvacuacionesPage() {
       .eq('paciente_id', pacienteId)
       .eq('tipo', 'evacuacion')
       .gte('hora_inicio', desde.toISOString())
+      .is('deleted_at', null)
       .order('hora_inicio', { ascending: true })
 
     setRegistros30(data ?? [])
@@ -170,6 +172,7 @@ export default function BitacoraEvacuacionesPage() {
       .eq('paciente_id', pacienteId)
       .eq('tipo', 'evacuacion')
       .not('foto_url', 'is', null)
+      .is('deleted_at', null)
       .order('hora_inicio', { ascending: false })
       .range(offset, offset + GALERIA_PAGE - 1)
 
@@ -298,10 +301,12 @@ export default function BitacoraEvacuacionesPage() {
 
   async function eliminarRegistro(registro: Registro) {
     if (!confirm('¿Eliminar este registro?')) return
-    if (registro.foto_url) {
-      await supabase.storage.from('documentos').remove([registro.foto_url])
-    }
-    await supabase.from('bitacora_registros').delete().eq('id', registro.id)
+    // NOM-004/024: nunca DELETE físico. Se marca deleted_at; la foto se conserva
+    // en storage como parte del rastro de auditoría.
+    await supabase
+      .from('bitacora_registros')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('id', registro.id)
     await cargarRegistros30()
     await cargarGaleria(true)
     await cargarListaTexto(true)
