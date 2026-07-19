@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
@@ -80,6 +80,25 @@ export default function BitacoraSuenoPage() {
   const [cargandoHistorial, setCargandoHistorial] = useState(true)
   const [nocheSeleccionada, setNocheSeleccionada] = useState<string | null>(null)
 
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const arrastre = useRef({ activo: false, x: 0, scrollLeft: 0 })
+
+  function iniciarArrastre(e: React.MouseEvent) {
+    const el = scrollRef.current
+    if (!el) return
+    arrastre.current = { activo: true, x: e.pageX - el.offsetLeft, scrollLeft: el.scrollLeft }
+  }
+  function moverArrastre(e: React.MouseEvent) {
+    const el = scrollRef.current
+    if (!el || !arrastre.current.activo) return
+    e.preventDefault()
+    const x = e.pageX - el.offsetLeft
+    el.scrollLeft = arrastre.current.scrollLeft - (x - arrastre.current.x)
+  }
+  function terminarArrastre() {
+    arrastre.current.activo = false
+  }
+
   useEffect(() => { cargarDatos() }, [])
 
   async function cargarDatos() {
@@ -96,7 +115,7 @@ export default function BitacoraSuenoPage() {
   async function cargarHistorial() {
     setCargandoHistorial(true)
     const desde = new Date()
-    desde.setDate(desde.getDate() - 29)
+    desde.setDate(desde.getDate() - 59)
 
     const { data } = await supabase
       .from('bitacora_registros')
@@ -142,6 +161,9 @@ export default function BitacoraSuenoPage() {
     setDetallePorNoche(detalle)
     setHistorial(resultado)
     setCargandoHistorial(false)
+    requestAnimationFrame(() => {
+      if (scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth
+    })
   }
 
   if (loading) return (
@@ -174,8 +196,8 @@ export default function BitacoraSuenoPage() {
         </div>
 
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <h2 className="font-bold text-sm text-slate-800 mb-1">Últimos 30 días</h2>
-          <p className="text-slate-400 text-xs mb-3">Cada barra es una noche. Toca una barra para ver el detalle completo.</p>
+          <h2 className="font-bold text-sm text-slate-800 mb-1">Últimos 60 días</h2>
+          <p className="text-slate-400 text-xs mb-3">Cada barra es una noche · desliza para ver más · toca una barra para el detalle completo.</p>
 
           <div className="flex items-center gap-4 mb-4">
             <div className="flex items-center gap-1.5">
@@ -197,13 +219,20 @@ export default function BitacoraSuenoPage() {
           ) : historial.length === 0 ? (
             <p className="text-slate-400 text-sm text-center py-8">Aún no hay suficientes registros para mostrar el historial.</p>
           ) : (
-            <>
+            <div
+              ref={scrollRef}
+              className="overflow-x-auto cursor-grab active:cursor-grabbing select-none -mx-1 px-1"
+              onMouseDown={iniciarArrastre}
+              onMouseMove={moverArrastre}
+              onMouseUp={terminarArrastre}
+              onMouseLeave={terminarArrastre}
+            >
               {(() => {
                 const maxHorasObservado = Math.max(0, ...historial.map(n => n.horas))
                 const escalaBase = Math.max(12, Math.ceil(maxHorasObservado))
                 const escalaGrafica = escalaBase * 1.15 // headroom para que la barra más alta no toque el techo
                 return (
-                  <div className="flex items-end gap-[3px] h-36 relative pl-7">
+                  <div className="flex items-end gap-[3px] h-36 relative pl-7 w-max">
                     {[8, 10, 12].map(hRef => (
                       <div key={hRef} className="absolute left-0 right-0 border-t border-dashed border-slate-300" style={{ bottom: `${(hRef / escalaGrafica) * 100}%` }}>
                         <span className="absolute left-0 -top-2 text-[9px] text-slate-400 bg-white pr-1">{hRef}h</span>
@@ -214,7 +243,7 @@ export default function BitacoraSuenoPage() {
                         key={i}
                         type="button"
                         onClick={() => setNocheSeleccionada(n.fecha)}
-                        className="flex-1 flex flex-col items-center justify-end h-full relative z-10"
+                        className="w-4 shrink-0 flex flex-col items-center justify-end h-full relative z-10"
                         title={`${formatFechaCorta(n.fecha)} · ${n.horas.toFixed(1)}h`}
                       >
                         {n.pipi && (
@@ -232,16 +261,16 @@ export default function BitacoraSuenoPage() {
                   </div>
                 )
               })()}
-              <div className="flex gap-[3px] mt-1 pl-7">
+              <div className="flex gap-[3px] mt-1 pl-7 w-max">
                 {historial.map((n, i) => (
-                  <div key={i} className="flex-1 text-center">
-                    {(i % 5 === 0 || i === historial.length - 1) && (
-                      <span className="text-[8px] text-slate-400">{formatFechaCorta(n.fecha)}</span>
+                  <div key={i} className="w-4 shrink-0 text-center">
+                    {(i % 7 === 0 || i === historial.length - 1) && (
+                      <span className="text-[8px] text-slate-400 whitespace-nowrap">{formatFechaCorta(n.fecha)}</span>
                     )}
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
