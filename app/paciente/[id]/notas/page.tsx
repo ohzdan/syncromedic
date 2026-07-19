@@ -9,8 +9,6 @@ const TIPOS_NOTA = [
   { id: "sesion_terapia", label: "Sesión de terapia", emoji: "🧠" },
   { id: "urgencia", label: "Urgencia", emoji: "🚨" },
   { id: "estudio", label: "Estudio", emoji: "🔬" },
-  { id: "seguimiento", label: "Seguimiento", emoji: "📊" },
-  { id: "interconsulta", label: "Interconsulta", emoji: "🔄" },
 ];
 
 // Qué tipos de nota puede elegir cada rol al crear una nota nueva.
