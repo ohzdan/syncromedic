@@ -539,7 +539,7 @@ export default function ExpedientePaciente() {
     return (
       <Link
         href={href}
-        className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer flex flex-col items-center text-center sm:items-start sm:text-left no-underline"
+        className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer flex flex-col items-center justify-center text-center sm:items-start sm:justify-start sm:text-left no-underline aspect-square sm:aspect-auto"
       >
         <p className="text-xl sm:text-2xl mb-1 sm:mb-3">{emoji}</p>
         <h2 className="text-slate-900 font-semibold text-xs sm:text-base leading-tight mb-0 sm:mb-1">{titulo}</h2>
