@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase";
-import { useRouter, useParams } from "next/navigation";
+import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 
 type Rol = 'familia' | 'medico' | 'terapeuta' | 'centro_terapias' | 'escuela' | 'admin'
@@ -32,19 +32,53 @@ function horaHHMM(iso: string) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+function fechaHHMMDD(iso: string) {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 /**
- * Construye un timestamp ISO a partir de una fecha base y una hora (HH:MM).
+ * Si se da una hora de referencia y la hora nueva es "menor" en el reloj,
+ * asumimos que cruzó la medianoche y devolvemos la fecha local del día siguiente.
+ */
+function fechaAjustada(fechaBase: string, horaHHMM_: string, horaReferencia?: string) {
+  if (horaReferencia && horaHHMM_ < horaReferencia) {
+    const d = new Date(fechaBase + 'T12:00:00')
+    d.setDate(d.getDate() + 1)
+    return d.toISOString().slice(0, 10)
+  }
+  return fechaBase
+}
+
+/**
+ * Construye el instante UTC correcto (ISO) a partir de una fecha base y una hora (HH:MM),
+ * interpretando esa fecha/hora como hora local del navegador (CDMX, UTC-6).
  * Si se da una hora de referencia y la hora nueva es "menor" en el reloj,
  * asumimos que cruzó la medianoche y sumamos un día.
  */
 function construirFechaHora(fechaBase: string, horaHHMM_: string, horaReferencia?: string) {
-  let fecha = fechaBase
-  if (horaReferencia && horaHHMM_ < horaReferencia) {
-    const d = new Date(fechaBase + 'T12:00:00')
-    d.setDate(d.getDate() + 1)
-    fecha = d.toISOString().slice(0, 10)
-  }
-  return `${fecha}T${horaHHMM_}:00`
+  const fecha = fechaAjustada(fechaBase, horaHHMM_, horaReferencia)
+  return localToUTCISO(fecha, horaHHMM_)
+}
+
+/**
+ * Convierte una fecha (YYYY-MM-DD) y hora (HH:MM) interpretadas como hora local
+ * del navegador al instante UTC correcto en formato ISO. Usar siempre esto
+ * (nunca armar el string a mano) al guardar hora_inicio/hora_fin en bitacora_registros.
+ */
+function localToUTCISO(fechaISO: string, horaHHMM: string) {
+  const [h, m] = horaHHMM.split(':').map(Number)
+  const d = new Date(fechaISO + 'T00:00:00')
+  d.setHours(h, m, 0, 0)
+  return d.toISOString()
+}
+
+/** Límites [inicio, fin) en UTC de un día calendario local (medianoche a medianoche CDMX). */
+function limitesDiaLocalUTC(fechaISO: string) {
+  const inicio = new Date(fechaISO + 'T00:00:00')
+  const fin = new Date(inicio)
+  fin.setDate(fin.getDate() + 1)
+  return { inicio: inicio.toISOString(), fin: fin.toISOString() }
 }
 
 function hoyISO() {
@@ -71,6 +105,7 @@ export default function ExpedientePaciente() {
   const [guardandoApodo, setGuardandoApodo] = useState(false);
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const supabase = createClient();
   const fotoEvacInputRef = useRef<HTMLInputElement>(null);
 
@@ -166,6 +201,50 @@ export default function ExpedientePaciente() {
     setGuardandoApodo(false);
   }
 
+  async function abrirDiarioParaEditar(nocheFecha: string) {
+    const pacienteId = params.id as string;
+    const { data } = await supabase
+      .from('bitacora_registros')
+      .select('id, tipo, hora_inicio, pipi_nocturno, nota')
+      .eq('paciente_id', pacienteId)
+      .in('tipo', ['sueno_inicio', 'sueno_fin', 'pipi_nocturno'])
+      .eq('noche_fecha', nocheFecha)
+      .is('deleted_at', null);
+
+    const inicio = (data || []).find(r => r.tipo === 'sueno_inicio');
+    const fin = (data || []).find(r => r.tipo === 'sueno_fin');
+    const pipi = (data || []).find(r => r.tipo === 'pipi_nocturno');
+
+    setFechaDormir(inicio ? fechaHHMMDD(inicio.hora_inicio) : sumarDias(nocheFecha, -1));
+    setHoraDormir(inicio ? horaHHMM(inicio.hora_inicio) : '20:40');
+    setFechaDespertar(nocheFecha);
+    setHoraDespertar(fin ? horaHHMM(fin.hora_inicio) : '06:50');
+    setDiarioPipi(!!pipi?.pipi_nocturno);
+    setFechaPipi(pipi ? fechaHHMMDD(pipi.hora_inicio) : nocheFecha);
+    setDiarioTuvoEvacuacion(false);
+    setFechaEvacuacion(sumarDias(nocheFecha, -1));
+    setDiarioConsistencia('normal');
+    setFotoEvacuacion(null);
+    setPreviewEvacuacion(null);
+    setNotaSueno(pipi?.nota || '');
+    setNotaEvacuacion('');
+    setDespertares([]);
+    setDiarioError('');
+    setDiarioExito(false);
+    setConflictoSueno(false);
+    setConflictoEvacuacion(false);
+    setConflictoPipi(false);
+    setConfirmandoSobrescritura(false);
+    setDiarioAbierto(true);
+    router.replace(`/paciente/${pacienteId}`);
+  }
+
+  useEffect(() => {
+    const nocheFecha = searchParams.get('editarSueno');
+    if (nocheFecha) abrirDiarioParaEditar(nocheFecha);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   function abrirDiario() {
     const ayer = sumarDias(hoyISO(), -1);
     setFechaDormir(ayer);
@@ -226,8 +305,7 @@ export default function ExpedientePaciente() {
     // ¿Ya existe una evacuación registrada ese día?
     let evacuacionExistente: any[] = [];
     if (diarioTuvoEvacuacion) {
-      const inicioDia = `${fechaEvacuacion}T00:00:00`;
-      const finDia = `${sumarDias(fechaEvacuacion, 1)}T00:00:00`;
+      const { inicio: inicioDia, fin: finDia } = limitesDiaLocalUTC(fechaEvacuacion);
       const { data } = await supabase
         .from('bitacora_registros')
         .select('id')
@@ -286,8 +364,7 @@ export default function ExpedientePaciente() {
         .is('deleted_at', null);
     }
     if (sobrescribirEvacuacion && diarioTuvoEvacuacion) {
-      const inicioDia = `${fechaEvacuacion}T00:00:00`;
-      const finDia = `${sumarDias(fechaEvacuacion, 1)}T00:00:00`;
+      const { inicio: inicioDia, fin: finDia } = limitesDiaLocalUTC(fechaEvacuacion);
       await supabase
         .from('bitacora_registros')
         .update({ deleted_at: ahoraISO })
@@ -312,7 +389,7 @@ export default function ExpedientePaciente() {
       paciente_id: pacienteId,
       tipo: 'sueno_inicio',
       noche_fecha: fechaDespertar,
-      hora_inicio: `${fechaDormir}T${horaDormir}:00`,
+      hora_inicio: localToUTCISO(fechaDormir, horaDormir),
       registrado_por: user.id,
     });
 
@@ -321,7 +398,7 @@ export default function ExpedientePaciente() {
       paciente_id: pacienteId,
       tipo: 'sueno_fin',
       noche_fecha: fechaDespertar,
-      hora_inicio: `${fechaDespertar}T${horaDespertar}:00`,
+      hora_inicio: localToUTCISO(fechaDespertar, horaDespertar),
       registrado_por: user.id,
     });
 
@@ -330,7 +407,7 @@ export default function ExpedientePaciente() {
       paciente_id: pacienteId,
       tipo: 'pipi_nocturno',
       noche_fecha: fechaPipi,
-      hora_inicio: `${fechaPipi}T12:00:00`,
+      hora_inicio: localToUTCISO(fechaPipi, '12:00'),
       pipi_nocturno: diarioPipi,
       nota: notaSueno || null,
       registrado_por: user.id,
@@ -340,7 +417,7 @@ export default function ExpedientePaciente() {
     let errDespertares: any = null;
     for (const d of despertares) {
       const horaInicioIso = construirFechaHora(fechaDormir, d.horaDespierto, horaDormir);
-      const fechaBaseVolvio = horaInicioIso.slice(0, 10);
+      const fechaBaseVolvio = fechaAjustada(fechaDormir, d.horaDespierto, horaDormir);
       const horaFinIso = d.horaVolvio ? construirFechaHora(fechaBaseVolvio, d.horaVolvio, d.horaDespierto) : null;
       const { error } = await supabase.from('bitacora_registros').insert({
         paciente_id: pacienteId,
@@ -373,7 +450,7 @@ export default function ExpedientePaciente() {
       const res = await supabase.from('bitacora_registros').insert({
         paciente_id: pacienteId,
         tipo: 'evacuacion',
-        hora_inicio: `${fechaEvacuacion}T12:00:00`,
+        hora_inicio: localToUTCISO(fechaEvacuacion, '12:00'),
         consistencia: diarioConsistencia,
         foto_url: fotoPath,
         nota: notaEvacuacion || null,

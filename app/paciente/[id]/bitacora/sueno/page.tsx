@@ -241,13 +241,19 @@ export default function BitacoraSuenoPage() {
             {!detalleModal.inicio || !detalleModal.fin ? (
               <p className="text-slate-400 text-sm text-center py-6">No hay registro completo de sueño para esta noche.</p>
             ) : (
-              <div className="bg-slate-50 rounded-xl p-4 mb-4 text-center">
-                <p className="font-bold text-2xl text-slate-800">{formatHora(detalleModal.inicio.hora_inicio)}</p>
-                <p className="text-slate-400 text-xs mt-1">hasta {formatHora(detalleModal.fin.hora_inicio)}</p>
+              <div className="bg-slate-50 rounded-xl p-4 mb-4">
+                <p className="text-slate-700 text-sm text-center">
+                  Se durmió a las <span className="font-bold text-slate-900">{formatHora(detalleModal.inicio.hora_inicio)}</span> y despertó a las <span className="font-bold text-slate-900">{formatHora(detalleModal.fin.hora_inicio)}</span>.
+                </p>
+                <p className="text-slate-800 text-center font-bold text-lg mt-1">
+                  Durmió {(minutosEntre(detalleModal.inicio.hora_inicio, detalleModal.fin.hora_inicio) / 60).toFixed(1)} horas
+                </p>
                 {detalleModal.pipi?.pipi_nocturno && (
-                  <span className="inline-block mt-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                    💧 Pipi nocturno
-                  </span>
+                  <div className="flex justify-center">
+                    <span className="inline-block mt-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                      💧 Pipí nocturno
+                    </span>
+                  </div>
                 )}
               </div>
             )}
@@ -284,9 +290,17 @@ export default function BitacoraSuenoPage() {
               </div>
             )}
 
-            <button onClick={() => setNocheSeleccionada(null)} className="w-full bg-slate-100 text-slate-600 text-sm font-bold py-3 rounded-xl mt-4">
-              Cerrar
-            </button>
+            <div className="flex gap-3 mt-4">
+              <button onClick={() => setNocheSeleccionada(null)} className="flex-1 bg-slate-100 text-slate-600 text-sm font-bold py-3 rounded-xl">
+                Cerrar
+              </button>
+              <button
+                onClick={() => router.push(`/paciente/${pacienteId}?editarSueno=${nocheSeleccionada}`)}
+                className="flex-1 bg-[#4C4FE0] hover:bg-[#3d3fc7] text-white text-sm font-bold py-3 rounded-xl transition-colors"
+              >
+                ✏️ Editar
+              </button>
+            </div>
           </div>
         </div>
       )}
