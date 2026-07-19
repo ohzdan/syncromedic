@@ -307,7 +307,7 @@ export default function NotasPage() {
             <p className="text-slate-500 text-sm">
               {filtroTipo === "todos" ? "Aún no hay notas clínicas." : "No hay notas de este tipo."}
             </p>
-            {puedeEscribirNotas && (
+            {puedeEscribirNotas && filtroTipo === "todos" && (
               <button
                 onClick={() => { limpiarFormulario(); setModalAbierto(true); }}
                 className="mt-4 text-[#1A6BFF] text-sm hover:underline"
