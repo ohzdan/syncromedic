@@ -203,10 +203,10 @@ export default function BitacoraSuenoPage() {
                 const escalaBase = Math.max(12, Math.ceil(maxHorasObservado))
                 const escalaGrafica = escalaBase * 1.15 // headroom para que la barra más alta no toque el techo
                 return (
-                  <div className="flex items-end gap-[3px] h-36 relative">
+                  <div className="flex items-end gap-[3px] h-36 relative pl-7">
                     {[8, 10, 12].map(hRef => (
                       <div key={hRef} className="absolute left-0 right-0 border-t border-dashed border-slate-300" style={{ bottom: `${(hRef / escalaGrafica) * 100}%` }}>
-                        <span className="absolute -left-0.5 -top-2 text-[9px] text-slate-400 bg-white pr-0.5">{hRef}h</span>
+                        <span className="absolute left-0 -top-2 text-[9px] text-slate-400 bg-white pr-1">{hRef}h</span>
                       </div>
                     ))}
                     {historial.map((n, i) => (
@@ -232,7 +232,7 @@ export default function BitacoraSuenoPage() {
                   </div>
                 )
               })()}
-              <div className="flex gap-[3px] mt-1">
+              <div className="flex gap-[3px] mt-1 pl-7">
                 {historial.map((n, i) => (
                   <div key={i} className="flex-1 text-center">
                     {(i % 5 === 0 || i === historial.length - 1) && (
