@@ -66,7 +66,7 @@ export default function BitacoraSuenoPage() {
   const [paciente, setPaciente] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
-  const [historial, setHistorial] = useState<{ fecha: string, horas: number, maxSeveridad: 'gris' | 'moderado' | 'severo' | null }[]>([])
+  const [historial, setHistorial] = useState<{ fecha: string, horas: number, maxSeveridad: 'gris' | 'moderado' | 'severo' | null, pipi: boolean }[]>([])
   const [detallePorNoche, setDetallePorNoche] = useState<Record<string, DetalleNoche>>({})
   const [cargandoHistorial, setCargandoHistorial] = useState(true)
   const [nocheSeleccionada, setNocheSeleccionada] = useState<string | null>(null)
@@ -113,7 +113,9 @@ export default function BitacoraSuenoPage() {
 
       detalle[fecha] = { inicio: inicioNoche, fin: finNoche, despertares: desperts, pipi }
 
-      if (!inicioNoche || !finNoche) return { fecha, horas: 0, maxSeveridad: null }
+      const huboPipi = !!pipi?.pipi_nocturno
+
+      if (!inicioNoche || !finNoche) return { fecha, horas: 0, maxSeveridad: null, pipi: huboPipi }
 
       const despertsConDuracion = desperts.filter(d => d.hora_fin)
       const enCamaMin = minutosEntre(inicioNoche.hora_inicio, finNoche.hora_inicio)
@@ -127,7 +129,7 @@ export default function BitacoraSuenoPage() {
         else if (sev === 'moderado' && maxSev !== 'severo') maxSev = 'moderado'
       })
 
-      return { fecha, horas, maxSeveridad: maxSev }
+      return { fecha, horas, maxSeveridad: maxSev, pipi: huboPipi }
     }).sort((a, b) => a.fecha.localeCompare(b.fecha))
 
     setDetallePorNoche(detalle)
@@ -177,6 +179,10 @@ export default function BitacoraSuenoPage() {
               <div className="w-2 h-2 rounded-full bg-red-500" />
               <span className="text-slate-500 text-[11px]">Despertar severo (&gt;60 min)</span>
             </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] leading-none">💧</span>
+              <span className="text-slate-500 text-[11px]">Pipí nocturno</span>
+            </div>
           </div>
 
           {cargandoHistorial ? (
@@ -199,6 +205,9 @@ export default function BitacoraSuenoPage() {
                     className="flex-1 flex flex-col items-center justify-end h-full relative z-10"
                     title={`${formatFechaCorta(n.fecha)} · ${n.horas.toFixed(1)}h`}
                   >
+                    {n.pipi && (
+                      <span className="text-[9px] leading-none mb-0.5" title="Pipí nocturno">💧</span>
+                    )}
                     {n.maxSeveridad && n.maxSeveridad !== 'gris' && (
                       <div className={`w-1.5 h-1.5 rounded-full mb-1 ${n.maxSeveridad === 'severo' ? 'bg-red-500' : 'bg-amber-500'}`} />
                     )}
