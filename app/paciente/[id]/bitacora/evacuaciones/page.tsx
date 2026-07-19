@@ -72,7 +72,7 @@ export default function BitacoraEvacuacionesPage() {
 
   const [vista, setVista] = useState<'hoy' | 'historial'>('hoy')
 
-  const [registros30, setRegistros30] = useState<{ hora_inicio: string; consistencia: Consistencia | null }[]>([])
+  const [registros30, setRegistros30] = useState<Registro[]>([])
 
   const [galeria, setGaleria] = useState<Registro[]>([])
   const [galeriaOffset, setGaleriaOffset] = useState(0)
@@ -152,7 +152,7 @@ export default function BitacoraEvacuacionesPage() {
 
     const { data } = await supabase
       .from('bitacora_registros')
-      .select('hora_inicio, consistencia')
+      .select('id, hora_inicio, consistencia, foto_url, nota, registrado_por')
       .eq('paciente_id', pacienteId)
       .eq('tipo', 'evacuacion')
       .gte('hora_inicio', desde.toISOString())
@@ -185,12 +185,12 @@ export default function BitacoraEvacuacionesPage() {
 
   // --- Agregados para Historial (últimos 30 días) ---
   const diasAgregados = useMemo(() => {
-    const dias: { fecha: Date; veces: number; tipo: Consistencia | null }[] = []
+    const dias: { fecha: Date; veces: number; tipo: Consistencia | null; fotoRegistro: Registro | null }[] = []
     for (let i = 29; i >= 0; i--) {
       const d = new Date()
       d.setDate(d.getDate() - i)
       d.setHours(0, 0, 0, 0)
-      dias.push({ fecha: d, veces: 0, tipo: null })
+      dias.push({ fecha: d, veces: 0, tipo: null, fotoRegistro: null })
     }
     const PRIORIDAD: Consistencia[] = ['diarrea', 'blanda', 'dura', 'normal']
 
@@ -204,6 +204,9 @@ export default function BitacoraEvacuacionesPage() {
         if (!dia.tipo || PRIORIDAD.indexOf(r.consistencia) < PRIORIDAD.indexOf(dia.tipo)) {
           dia.tipo = r.consistencia
         }
+      }
+      if (r.foto_url && !dia.fotoRegistro) {
+        dia.fotoRegistro = r
       }
     })
     return dias
@@ -547,8 +550,19 @@ export default function BitacoraEvacuacionesPage() {
                   const alturaPct = d.veces > 0 ? Math.max(8, (d.veces / maxVeces) * 100) : 3
                   const color = d.veces === 0 ? '#F1F5F9' : (d.tipo ? CONSISTENCIA_COLORS[d.tipo] : VERDE)
                   const etiquetaDia = `Hace ${29 - i} día${29 - i === 1 ? '' : 's'}`
+                  const tieneFoto = !!d.fotoRegistro
                   return (
-                    <div key={i} className="flex-1 flex flex-col items-center justify-end h-full min-w-[5px]">
+                    <button
+                      key={i}
+                      type="button"
+                      disabled={!tieneFoto}
+                      onClick={() => d.fotoRegistro && abrirFoto(d.fotoRegistro)}
+                      className={`flex-1 flex flex-col items-center justify-end h-full min-w-[5px] ${tieneFoto ? 'cursor-pointer hover:opacity-70' : 'cursor-default'} transition-opacity`}
+                      title={`${etiquetaDia} · ${d.veces} ${d.veces === 1 ? 'vez' : 'veces'}${d.tipo ? ' · ' + CONSISTENCIA_LABELS[d.tipo] : ''}${tieneFoto ? ' · con foto' : ''}`}
+                    >
+                      {tieneFoto && (
+                        <span className="text-[8px] leading-none mb-1">📷</span>
+                      )}
                       {d.veces === 0 && (
                         <div
                           className="w-[7px] h-[7px] rounded-full mb-0.5"
@@ -559,9 +573,8 @@ export default function BitacoraEvacuacionesPage() {
                       <div
                         className="w-full rounded-t-sm"
                         style={{ maxWidth: '9px', height: `${alturaPct}%`, background: color }}
-                        title={`${etiquetaDia} · ${d.veces} ${d.veces === 1 ? 'vez' : 'veces'}${d.tipo ? ' · ' + CONSISTENCIA_LABELS[d.tipo] : ''}`}
                       />
-                    </div>
+                    </button>
                   )
                 })}
               </div>
@@ -575,6 +588,7 @@ export default function BitacoraEvacuacionesPage() {
                 <span><span className="inline-block w-[9px] h-[9px] rounded-[3px] mr-1" style={{ background: AMBAR }} />Blanda/Dura</span>
                 <span><span className="inline-block w-[9px] h-[9px] rounded-[3px] mr-1" style={{ background: ROJO }} />Diarrea</span>
                 <span><span className="inline-block w-[9px] h-[9px] rounded-full mr-1" style={{ background: '#FCA5A5', border: `1.5px solid ${ROJO}` }} />Sin evacuación</span>
+                <span>📷 Con foto</span>
               </div>
             </div>
           </>
