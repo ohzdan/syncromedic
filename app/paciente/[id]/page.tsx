@@ -98,6 +98,7 @@ export default function ExpedientePaciente() {
   const [verificando, setVerificando] = useState(false);
   const [conflictoSueno, setConflictoSueno] = useState(false);
   const [conflictoEvacuacion, setConflictoEvacuacion] = useState(false);
+  const [conflictoPipi, setConflictoPipi] = useState(false);
   const [confirmandoSobrescritura, setConfirmandoSobrescritura] = useState(false);
 
   useEffect(() => {
@@ -238,21 +239,32 @@ export default function ExpedientePaciente() {
       evacuacionExistente = data || [];
     }
 
+    // ¿Ya existe un registro de pipí nocturno para esa fecha?
+    const { data: pipiExistente } = await supabase
+      .from('bitacora_registros')
+      .select('id')
+      .eq('paciente_id', pacienteId)
+      .eq('tipo', 'pipi_nocturno')
+      .eq('noche_fecha', fechaPipi)
+      .is('deleted_at', null);
+
     const hayConflictoSueno = (sueñoExistente || []).length > 0;
     const hayConflictoEvacuacion = evacuacionExistente.length > 0;
+    const hayConflictoPipi = (pipiExistente || []).length > 0;
     setVerificando(false);
 
-    if ((hayConflictoSueno || hayConflictoEvacuacion) && !confirmandoSobrescritura) {
+    if ((hayConflictoSueno || hayConflictoEvacuacion || hayConflictoPipi) && !confirmandoSobrescritura) {
       setConflictoSueno(hayConflictoSueno);
       setConflictoEvacuacion(hayConflictoEvacuacion);
+      setConflictoPipi(hayConflictoPipi);
       setConfirmandoSobrescritura(true);
       return;
     }
 
-    await guardarDiario(hayConflictoSueno, hayConflictoEvacuacion);
+    await guardarDiario(hayConflictoSueno, hayConflictoEvacuacion, hayConflictoPipi);
   }
 
-  async function guardarDiario(sobrescribirSueno: boolean, sobrescribirEvacuacion: boolean) {
+  async function guardarDiario(sobrescribirSueno: boolean, sobrescribirEvacuacion: boolean, sobrescribirPipi: boolean) {
     setGuardandoDiario(true);
     setDiarioError('');
 
@@ -283,6 +295,15 @@ export default function ExpedientePaciente() {
         .eq('tipo', 'evacuacion')
         .gte('hora_inicio', inicioDia)
         .lt('hora_inicio', finDia)
+        .is('deleted_at', null);
+    }
+    if (sobrescribirPipi) {
+      await supabase
+        .from('bitacora_registros')
+        .update({ deleted_at: ahoraISO })
+        .eq('paciente_id', pacienteId)
+        .eq('tipo', 'pipi_nocturno')
+        .eq('noche_fecha', fechaPipi)
         .is('deleted_at', null);
     }
 
@@ -659,6 +680,7 @@ export default function ExpedientePaciente() {
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 text-sm text-amber-800 flex flex-col gap-1.5">
                   {conflictoSueno && <p>😴 Ya hay un registro de sueño para la noche que despierta el {formatFechaCorta(fechaDespertar)}.</p>}
                   {conflictoEvacuacion && <p>💩 Ya hay una evacuación registrada el {formatFechaCorta(fechaEvacuacion)}.</p>}
+                  {conflictoPipi && <p>💧 Ya hay un registro de pipí nocturno para el {formatFechaCorta(fechaPipi)}.</p>}
                 </div>
                 <p className="text-slate-500 text-xs text-center mb-5">¿Quieres sobrescribir lo ya guardado con esta nueva información?</p>
                 <div className="flex gap-3">
@@ -666,7 +688,7 @@ export default function ExpedientePaciente() {
                     className="flex-1 border border-slate-200 text-slate-600 text-sm font-medium py-3 rounded-xl hover:bg-slate-50 transition-colors">
                     Cancelar
                   </button>
-                  <button onClick={() => guardarDiario(conflictoSueno, conflictoEvacuacion)} disabled={guardandoDiario}
+                  <button onClick={() => guardarDiario(conflictoSueno, conflictoEvacuacion, conflictoPipi)} disabled={guardandoDiario}
                     className="flex-1 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white text-sm font-semibold py-3 rounded-xl transition-colors">
                     {guardandoDiario ? "Guardando..." : "Sobrescribir"}
                   </button>
