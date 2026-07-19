@@ -201,24 +201,40 @@ export default function TimelinePage() {
           <p className="text-slate-500 text-sm mt-1">{paciente?.nombre} - Historial cronologico del expediente</p>
         </div>
 
-        <div className="grid grid-cols-4 gap-3 mb-8">
+        <div className="grid grid-cols-4 gap-1.5 sm:gap-3 mb-8">
           {[
             { label: 'Notas',        value: stats.notas,        color: '#1A6BFF' },
             { label: 'Medicamentos', value: stats.medicamentos, color: '#00C97A' },
             { label: 'Documentos',   value: stats.documentos,   color: '#f59e0b' },
             { label: 'Especialistas',value: stats.especialistas, color: '#8b5cf6' },
           ].map(s => (
-            <div key={s.label} className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+            <div key={s.label} className="bg-slate-50 border border-slate-200 rounded-xl px-1 py-3 text-center">
               <div className="text-xl font-semibold" style={{ color: s.color }}>{s.value}</div>
-              <div className="text-xs text-slate-400 mt-0.5">{s.label}</div>
+              <div className="text-[10.5px] sm:text-xs text-slate-400 mt-0.5 leading-tight break-words">{s.label}</div>
             </div>
           ))}
         </div>
 
-        <div className="flex gap-2 flex-wrap mb-8">
+        <div
+          className="flex gap-2 overflow-x-auto scrollbar-none -mx-1 px-1 mb-8 cursor-grab active:cursor-grabbing select-none"
+          onMouseDown={(e) => {
+            const el = e.currentTarget
+            const startX = e.pageX - el.offsetLeft
+            const startScroll = el.scrollLeft
+            function mover(ev: MouseEvent) {
+              el.scrollLeft = startScroll - (ev.pageX - el.offsetLeft - startX)
+            }
+            function soltar() {
+              window.removeEventListener('mousemove', mover)
+              window.removeEventListener('mouseup', soltar)
+            }
+            window.addEventListener('mousemove', mover)
+            window.addEventListener('mouseup', soltar)
+          }}
+        >
           <button
             onClick={() => setFiltro('all')}
-            className={'px-4 py-2 rounded-full text-sm font-medium border transition-all ' + (filtro === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200')}
+            className={'flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium border transition-all ' + (filtro === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200')}
           >
             Todos
           </button>
@@ -227,12 +243,16 @@ export default function TimelinePage() {
               key={t}
               onClick={() => setFiltro(t)}
               style={filtro === t ? { background: COLORES[t].bg, color: COLORES[t].text, borderColor: COLORES[t].border } : {}}
-              className={'px-4 py-2 rounded-full text-sm font-medium border transition-all ' + (filtro === t ? '' : 'bg-white text-slate-500 border-slate-200')}
+              className={'flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium border transition-all ' + (filtro === t ? '' : 'bg-white text-slate-500 border-slate-200')}
             >
               {EMOJIS[t]} {LABELS[t]}
             </button>
           ))}
         </div>
+        <style jsx>{`
+          .scrollbar-none::-webkit-scrollbar { display: none; }
+          .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
+        `}</style>
 
         {eventosFiltrados.length === 0 ? (
           <div className="text-center py-16">
