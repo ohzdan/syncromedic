@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
@@ -45,6 +45,10 @@ function formatFechaCorta(fecha: string) {
 
 function formatFechaLarga(fecha: string) {
   return new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
+function fechaISOLocal(d: Date) {
+  return d.toISOString().slice(0, 10)
 }
 
 function minutosEntre(a: string, b: string) {
@@ -98,6 +102,51 @@ export default function BitacoraSuenoPage() {
   function terminarArrastre() {
     arrastre.current.activo = false
   }
+
+  // KPIs de los últimos 30 días.
+  // Regla: una noche "tiene registro" si existen hora de dormir Y hora de despertar
+  // (es decir, se pueden calcular horas de sueño). Si tiene registro pero falta el
+  // pipí nocturno o no hay despertares agregados, se cuenta como "no hizo pipí" /
+  // "sin despertares" — NO como día sin registro. Si NO hay horas de sueño, la noche
+  // completa se excluye de todos los promedios y conteos.
+  const kpis = useMemo(() => {
+    const dias: string[] = []
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      dias.push(fechaISOLocal(d))
+    }
+
+    let diasRegistrados = 0
+    let sumaHoras = 0
+    let leves = 0, moderados = 0, severos = 0
+    let vecesPipi = 0
+
+    dias.forEach(fecha => {
+      const detalle = detallePorNoche[fecha]
+      if (!detalle || !detalle.inicio || !detalle.fin) return // sin horas de sueño = sin registro, se excluye
+
+      diasRegistrados++
+      sumaHoras += horasDormidas(detalle)
+
+      detalle.despertares.forEach(d => {
+        if (!d.hora_fin) return
+        const sev = severidad(minutosEntre(d.hora_inicio, d.hora_fin as string))
+        if (sev === 'gris') leves++
+        else if (sev === 'moderado') moderados++
+        else if (sev === 'severo') severos++
+      })
+
+      if (detalle.pipi?.pipi_nocturno) vecesPipi++
+    })
+
+    return {
+      diasRegistrados,
+      diasSinRegistro: 30 - diasRegistrados,
+      promedioHoras: diasRegistrados > 0 ? sumaHoras / diasRegistrados : 0,
+      leves, moderados, severos, vecesPipi,
+    }
+  }, [detallePorNoche])
 
   useEffect(() => { cargarDatos() }, [])
 
@@ -194,6 +243,37 @@ export default function BitacoraSuenoPage() {
             <p className="text-slate-500 text-sm">{paciente?.nombre}</p>
           </div>
         </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+            <div className="text-xl font-semibold text-[#4C4FE0]">{kpis.diasRegistrados > 0 ? kpis.promedioHoras.toFixed(1) + 'h' : '—'}</div>
+            <div className="text-[10.5px] text-slate-400 mt-0.5 leading-tight">Promedio de sueño</div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+            <div className="text-xl font-semibold text-slate-400">{kpis.leves}</div>
+            <div className="text-[10.5px] text-slate-400 mt-0.5 leading-tight">Despertares leves</div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+            <div className="text-xl font-semibold text-amber-500">{kpis.moderados}</div>
+            <div className="text-[10.5px] text-slate-400 mt-0.5 leading-tight">Despertares moderados</div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+            <div className="text-xl font-semibold text-red-500">{kpis.severos}</div>
+            <div className="text-[10.5px] text-slate-400 mt-0.5 leading-tight">Despertares severos</div>
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center">
+            <div className="text-xl font-semibold text-sky-500">{kpis.vecesPipi}</div>
+            <div className="text-[10.5px] text-slate-400 mt-0.5 leading-tight">Noches con pipí</div>
+          </div>
+        </div>
+
+        {kpis.diasSinRegistro > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 mb-4">
+            <p className="text-amber-700 text-xs">
+              ⚠️ {kpis.diasSinRegistro} {kpis.diasSinRegistro === 1 ? 'noche' : 'noches'} sin registro de sueño en los últimos 30 días. Los KPIs de arriba se calcularon solo con los {kpis.diasRegistrados} días que sí tienen registro.
+            </p>
+          </div>
+        )}
 
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
           <h2 className="font-bold text-sm text-slate-800 mb-1">Últimos 60 días</h2>
