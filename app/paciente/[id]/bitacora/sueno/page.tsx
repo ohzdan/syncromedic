@@ -51,6 +51,15 @@ function minutosEntre(a: string, b: string) {
   return Math.round((new Date(b).getTime() - new Date(a).getTime()) / 60000)
 }
 
+function horasDormidas(detalle: DetalleNoche) {
+  if (!detalle.inicio || !detalle.fin) return 0
+  const enCamaMin = minutosEntre(detalle.inicio.hora_inicio, detalle.fin.hora_inicio)
+  const despiertaMin = detalle.despertares
+    .filter(d => d.hora_fin)
+    .reduce((acc, d) => acc + minutosEntre(d.hora_inicio, d.hora_fin as string), 0)
+  return Math.max(0, (enCamaMin - despiertaMin) / 60)
+}
+
 function severidad(minutos: number): 'gris' | 'moderado' | 'severo' {
   if (minutos < 15) return 'gris'
   if (minutos <= 60) return 'moderado'
@@ -118,9 +127,7 @@ export default function BitacoraSuenoPage() {
       if (!inicioNoche || !finNoche) return { fecha, horas: 0, maxSeveridad: null, pipi: huboPipi }
 
       const despertsConDuracion = desperts.filter(d => d.hora_fin)
-      const enCamaMin = minutosEntre(inicioNoche.hora_inicio, finNoche.hora_inicio)
-      const despiertaMin = despertsConDuracion.reduce((acc, d) => acc + minutosEntre(d.hora_inicio, d.hora_fin as string), 0)
-      const horas = Math.max(0, (enCamaMin - despiertaMin) / 60)
+      const horas = horasDormidas(detalle[fecha])
 
       let maxSev: 'gris' | 'moderado' | 'severo' | null = null
       despertsConDuracion.forEach(d => {
@@ -191,33 +198,41 @@ export default function BitacoraSuenoPage() {
             <p className="text-slate-400 text-sm text-center py-8">Aún no hay suficientes registros para mostrar el historial.</p>
           ) : (
             <>
-              <div className="flex items-end gap-[3px] h-36 relative pt-5">
-                {[8, 10, 12].map(hRef => (
-                  <div key={hRef} className="absolute left-0 right-0 border-t border-dashed border-slate-300" style={{ bottom: `${(hRef / 12) * 100}%` }}>
-                    <span className="absolute -left-0.5 -top-2 text-[9px] text-slate-400 bg-white pr-0.5">{hRef}h</span>
+              {(() => {
+                const maxHorasObservado = Math.max(0, ...historial.map(n => n.horas))
+                const escalaBase = Math.max(12, Math.ceil(maxHorasObservado))
+                const escalaGrafica = escalaBase * 1.15 // headroom para que la barra más alta no toque el techo
+                const referencias = escalaBase > 12 ? [8, 10, 12, escalaBase] : [8, 10, 12]
+                return (
+                  <div className="flex items-end gap-[3px] h-36 relative">
+                    {referencias.map(hRef => (
+                      <div key={hRef} className="absolute left-0 right-0 border-t border-dashed border-slate-300" style={{ bottom: `${(hRef / escalaGrafica) * 100}%` }}>
+                        <span className="absolute -left-0.5 -top-2 text-[9px] text-slate-400 bg-white pr-0.5">{hRef}h</span>
+                      </div>
+                    ))}
+                    {historial.map((n, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setNocheSeleccionada(n.fecha)}
+                        className="flex-1 flex flex-col items-center justify-end h-full relative z-10"
+                        title={`${formatFechaCorta(n.fecha)} · ${n.horas.toFixed(1)}h`}
+                      >
+                        {n.pipi && (
+                          <span className="text-[9px] leading-none mb-0.5" title="Pipí nocturno">💧</span>
+                        )}
+                        {n.maxSeveridad && n.maxSeveridad !== 'gris' && (
+                          <div className={`w-1.5 h-1.5 rounded-full mb-1 ${n.maxSeveridad === 'severo' ? 'bg-red-500' : 'bg-amber-500'}`} />
+                        )}
+                        <div
+                          className="w-full max-w-[9px] bg-[#4C4FE0] rounded-t hover:opacity-70 transition-opacity"
+                          style={{ height: `${Math.max(0, (n.horas / escalaGrafica) * 100)}%` }}
+                        />
+                      </button>
+                    ))}
                   </div>
-                ))}
-                {historial.map((n, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setNocheSeleccionada(n.fecha)}
-                    className="flex-1 flex flex-col items-center justify-end h-full relative z-10"
-                    title={`${formatFechaCorta(n.fecha)} · ${n.horas.toFixed(1)}h`}
-                  >
-                    {n.pipi && (
-                      <span className="text-[9px] leading-none mb-0.5" title="Pipí nocturno">💧</span>
-                    )}
-                    {n.maxSeveridad && n.maxSeveridad !== 'gris' && (
-                      <div className={`w-1.5 h-1.5 rounded-full mb-1 ${n.maxSeveridad === 'severo' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                    )}
-                    <div
-                      className="w-full max-w-[9px] bg-[#4C4FE0] rounded-t hover:opacity-70 transition-opacity"
-                      style={{ height: `${Math.min(100, (n.horas / 12) * 100)}%` }}
-                    />
-                  </button>
-                ))}
-              </div>
+                )
+              })()}
               <div className="flex gap-[3px] mt-1">
                 {historial.map((n, i) => (
                   <div key={i} className="flex-1 text-center">
@@ -246,8 +261,13 @@ export default function BitacoraSuenoPage() {
                   Se durmió a las <span className="font-bold text-slate-900">{formatHora(detalleModal.inicio.hora_inicio)}</span> y despertó a las <span className="font-bold text-slate-900">{formatHora(detalleModal.fin.hora_inicio)}</span>.
                 </p>
                 <p className="text-slate-800 text-center font-bold text-lg mt-1">
-                  Durmió {(minutosEntre(detalleModal.inicio.hora_inicio, detalleModal.fin.hora_inicio) / 60).toFixed(1)} horas
+                  Durmió {horasDormidas(detalleModal).toFixed(1)} horas
                 </p>
+                {detalleModal.despertares.some(d => d.hora_fin) && (
+                  <p className="text-slate-400 text-[11px] text-center mt-0.5">
+                    (ya se restaron los despertares nocturnos con duración registrada)
+                  </p>
+                )}
                 {detalleModal.pipi?.pipi_nocturno && (
                   <div className="flex justify-center">
                     <span className="inline-block mt-2 text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
