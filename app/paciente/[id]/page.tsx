@@ -7,6 +7,53 @@ import Link from "next/link";
 type Rol = 'familia' | 'medico' | 'terapeuta' | 'centro_terapias' | 'escuela' | 'admin'
 type Consistencia = 'normal' | 'blanda' | 'dura' | 'diarrea'
 
+const ANTECEDENTES_FAMILIARES_LABELS: Record<string, string> = {
+  diabetes: "Diabetes",
+  hipertension: "Hipertensión",
+  corazon: "Enfermedades del corazón",
+  epilepsia: "Epilepsia o convulsiones",
+  asma: "Asma",
+  alergias: "Alergias alimentarias o ambientales",
+  autoinmune: "Enfermedades autoinmunes (artritis, lupus, etc.)",
+  cancer: "Cáncer",
+  neurodesarrollo: "Trastornos del neurodesarrollo (autismo, TDAH, etc.)",
+  mental: "Enfermedades mentales (depresión, esquizofrenia, etc.)",
+  genetica: "Enfermedades genéticas conocidas",
+};
+
+function formatAntecedentesFamiliares(detalle: Record<string, string[]> | undefined) {
+  if (!detalle) return null;
+  const entradas = Object.entries(detalle).filter(
+    ([, parentescos]) => parentescos && parentescos.length > 0 && !(parentescos.length === 1 && parentescos[0] === "Ninguno")
+  );
+  if (entradas.length === 0) return null;
+  return entradas
+    .map(([condId, parentescos]) => `${ANTECEDENTES_FAMILIARES_LABELS[condId] || condId} (${parentescos.join(", ")})`)
+    .join("; ");
+}
+
+function SeccionExpediente({ titulo, icono, children }: { titulo: string; icono: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-4">
+      <h2 className="text-slate-800 font-semibold mb-4 flex items-center gap-2">
+        <span>{icono}</span> {titulo}
+      </h2>
+      <div className="flex flex-col">{children}</div>
+    </div>
+  );
+}
+
+function DatoExpediente({ label, valor, sinBorde }: { label: string; valor: string | null | undefined; sinBorde?: boolean }) {
+  return (
+    <div className={`py-2.5 ${!sinBorde ? "border-b border-slate-100" : ""}`}>
+      <p className="text-slate-500 text-xs">{label}</p>
+      <p className="text-slate-800 text-sm font-medium mt-0.5">
+        {valor || <span className="text-slate-300">Sin información</span>}
+      </p>
+    </div>
+  );
+}
+
 const CONSISTENCIA_LABELS: Record<Consistencia, string> = {
   normal: 'Normal',
   blanda: 'Blanda',
@@ -103,6 +150,7 @@ export default function ExpedientePaciente() {
   const [editandoApodo, setEditandoApodo] = useState(false);
   const [apodoInput, setApodoInput] = useState("");
   const [guardandoApodo, setGuardandoApodo] = useState(false);
+  const [expedienteAbierto, setExpedienteAbierto] = useState(false);
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
@@ -597,14 +645,146 @@ export default function ExpedientePaciente() {
           )}
 
           {puedeVerExpedienteCompleto && (
-            <Link
-              href={`/paciente/${params.id}/resumen`}
-              className="mt-4 flex items-center justify-center gap-1.5 bg-blue-50 hover:bg-blue-100 text-[#1A6BFF] text-sm font-semibold py-2.5 rounded-xl transition-colors no-underline"
+            <button
+              type="button"
+              onClick={() => setExpedienteAbierto(!expedienteAbierto)}
+              className="mt-4 w-full flex items-center justify-center gap-1.5 text-[#1A6BFF] text-sm font-semibold py-2.5 hover:underline transition-colors"
             >
-              📄 Ver expediente completo →
-            </Link>
+              Ver expediente completo
+              <span className={`inline-block transition-transform ${expedienteAbierto ? 'rotate-180' : ''}`}>▾</span>
+            </button>
           )}
         </div>
+
+        {puedeVerExpedienteCompleto && expedienteAbierto && (
+          <div className="mb-4">
+            {esFamilia && (
+              <div className="flex justify-end mb-2">
+                <Link
+                  href={`/paciente/${params.id}/scouting?modo=editar`}
+                  className="text-[#1A6BFF] text-sm font-medium hover:underline whitespace-nowrap"
+                >
+                  ✏️ Editar
+                </Link>
+              </div>
+            )}
+
+            <SeccionExpediente titulo="Datos generales" icono="👤">
+              <DatoExpediente label="Diagnósticos" valor={paciente.diagnosticos_principales?.join(", ")} />
+              <DatoExpediente label="Alergias" valor={paciente.alergias?.join(", ")} />
+              <DatoExpediente label="Tipo de sangre" valor={paciente.tipo_sangre} />
+              <DatoExpediente label="Lateralidad" valor={paciente.lateralidad} sinBorde />
+            </SeccionExpediente>
+
+            <SeccionExpediente titulo="Embarazo y nacimiento" icono="🤰">
+              <DatoExpediente label="Embarazo de alto riesgo" valor={paciente.embarazo_alto_riesgo} />
+              <DatoExpediente
+                label="Complicaciones del embarazo"
+                valor={[
+                  paciente.complicaciones_embarazo && `Complicaciones: ${paciente.complicaciones_embarazo}`,
+                  paciente.diabetes_gestacional && `Diabetes gestacional: ${paciente.diabetes_gestacional}`,
+                ].filter(Boolean).join(" · ") || null}
+              />
+              <DatoExpediente label="Semanas de gestación" valor={paciente.semanas_gestacion?.toString()} />
+              <DatoExpediente label="Tipo de parto" valor={paciente.tipo_parto} />
+              <DatoExpediente
+                label="Complicaciones al nacer"
+                valor={[
+                  paciente.complicaciones_nacimiento && `Complicaciones: ${paciente.complicaciones_nacimiento}`,
+                  paciente.peso_nacer && `Peso: ${paciente.peso_nacer}`,
+                ].filter(Boolean).join(" · ") || null}
+              />
+              <DatoExpediente
+                label="UCIN y APGAR"
+                valor={[
+                  paciente.requirio_ucin && `UCIN: ${paciente.requirio_ucin}`,
+                  paciente.apgar && `APGAR: ${paciente.apgar}`,
+                ].filter(Boolean).join(" · ") || null}
+              />
+              <DatoExpediente
+                label="Tamices neonatales"
+                valor={[paciente.tamiz_metabolico, paciente.tamiz_auditivo, paciente.tamiz_cardiaco].filter(Boolean).join(" · ") || null}
+                sinBorde
+              />
+            </SeccionExpediente>
+
+            <SeccionExpediente titulo="Desarrollo" icono="📈">
+              <DatoExpediente
+                label="Desarrollo motor"
+                valor={
+                  paciente.desarrollo_motor
+                    ? [
+                        paciente.desarrollo_motor.cabeza && `Sostuvo cabeza: ${paciente.desarrollo_motor.cabeza}`,
+                        paciente.desarrollo_motor.sentado && `Se sentó: ${paciente.desarrollo_motor.sentado}`,
+                        paciente.desarrollo_motor.gateo && `Gateo: ${paciente.desarrollo_motor.gateo}`,
+                        paciente.desarrollo_motor.camino && `Caminó: ${paciente.desarrollo_motor.camino}`,
+                        paciente.desarrollo_motor.retraso && `Retraso reportado: ${paciente.desarrollo_motor.retraso}`,
+                      ].filter(Boolean).join(" · ") || null
+                    : null
+                }
+              />
+              <DatoExpediente
+                label="Desarrollo del lenguaje"
+                valor={
+                  paciente.desarrollo_lenguaje
+                    ? [
+                        paciente.desarrollo_lenguaje.primeras_palabras && `Primeras palabras: ${paciente.desarrollo_lenguaje.primeras_palabras}`,
+                        paciente.desarrollo_lenguaje.retraso && `Retraso reportado: ${paciente.desarrollo_lenguaje.retraso}`,
+                        paciente.desarrollo_lenguaje.regresiones && `Regresiones: ${paciente.desarrollo_lenguaje.regresiones}`,
+                      ].filter(Boolean).join(" · ") || null
+                    : null
+                }
+              />
+              <DatoExpediente label="Terapias actuales" valor={paciente.terapias_actuales?.join(", ")} sinBorde />
+            </SeccionExpediente>
+
+            <SeccionExpediente titulo="Antecedentes y condiciones" icono="📋">
+              <DatoExpediente label="Antecedentes familiares" valor={formatAntecedentesFamiliares(paciente.antecedentes_familiares_detalle)} />
+              <DatoExpediente
+                label="Historial médico"
+                valor={[paciente.cirugias_previas, paciente.hospitalizaciones_previas].filter(Boolean).join(" · ") || null}
+              />
+              <DatoExpediente label="Condiciones crónicas" valor={paciente.condiciones_cronicas?.join(", ")} sinBorde />
+            </SeccionExpediente>
+
+            <SeccionExpediente titulo="Vacunas" icono="💉">
+              <DatoExpediente
+                label="Vacunas registradas"
+                valor={paciente.vacunas?.lista?.length ? paciente.vacunas.lista.join(", ") : null}
+              />
+              <DatoExpediente label="Otras vacunas" valor={paciente.vacunas_otras} sinBorde />
+            </SeccionExpediente>
+
+            <SeccionExpediente titulo="Rutinas diarias" icono="🌙">
+              <DatoExpediente
+                label="Sueño"
+                valor={paciente.sueno_hora_dormir ? `Duerme ${paciente.sueno_hora_dormir} · Despierta ${paciente.sueno_hora_despertar}${paciente.sueno_colecho ? ` · Colecho: ${paciente.sueno_colecho}` : ""}` : null}
+              />
+              <DatoExpediente label="Alimentación" valor={paciente.alimentacion_notas} sinBorde />
+            </SeccionExpediente>
+
+            <SeccionExpediente titulo="Entorno familiar" icono="🏠">
+              <DatoExpediente label="Con quién vive" valor={paciente.con_quien_vive} />
+              <DatoExpediente label="Hermanos" valor={paciente.hermanos} />
+              <DatoExpediente label="Escuela" valor={paciente.escuela_regular} sinBorde />
+            </SeccionExpediente>
+
+            <SeccionExpediente titulo="Contacto de emergencia" icono="🚨">
+              <DatoExpediente label="Nombre" valor={paciente.contacto_emergencia?.nombre} />
+              <DatoExpediente
+                label="Teléfono y parentesco"
+                valor={[paciente.contacto_emergencia?.telefono, paciente.contacto_emergencia?.parentesco].filter(Boolean).join(" · ") || null}
+              />
+              <DatoExpediente label="Hospital de preferencia" valor={paciente.hospital_preferencia} />
+              <DatoExpediente label="Médico de cabecera" valor={paciente.medico_cabecera} />
+              <DatoExpediente
+                label="Seguro médico"
+                valor={paciente.seguro_medico === "Sí" ? `Sí${paciente.aseguradora ? ` — ${paciente.aseguradora}` : ""}` : paciente.seguro_medico}
+                sinBorde
+              />
+            </SeccionExpediente>
+          </div>
+        )}
 
         {/* Historial / Timeline: lo más relevante, siempre arriba */}
         {puedeVerTimeline && (
