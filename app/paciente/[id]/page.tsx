@@ -567,26 +567,24 @@ export default function ExpedientePaciente() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
 
         {/* Header unificado: datos, apodo, diagnóstico, alergias y acceso al expediente completo */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 mb-6 shadow-sm">
-          <div className="flex items-start gap-4 sm:gap-6">
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-blue-50 flex items-center justify-center text-2xl sm:text-3xl flex-shrink-0">
+        <div className={`relative bg-white border border-slate-200 p-5 sm:p-6 shadow-sm ${expedienteAbierto && puedeVerExpedienteCompleto ? 'rounded-t-2xl border-b-0' : 'rounded-2xl mb-6'}`}>
+          {esFamilia && (
+            <Link
+              href={`/paciente/${params.id}/scouting?modo=editar`}
+              className="absolute top-5 right-5 sm:top-6 sm:right-6 text-slate-400 hover:text-[#1A6BFF] text-xs font-medium transition-colors whitespace-nowrap"
+            >
+              ✏️ Editar
+            </Link>
+          )}
+          <div className="flex flex-col items-center text-center gap-3 sm:flex-row sm:items-start sm:text-left sm:gap-6">
+            <div className="w-20 h-20 sm:w-16 sm:h-16 rounded-full bg-blue-50 flex items-center justify-center text-3xl flex-shrink-0">
               👤
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-3">
-                <h1 className="text-slate-900 text-xl sm:text-2xl font-semibold">{paciente.nombre}</h1>
-                {esFamilia && (
-                  <Link
-                    href={`/paciente/${params.id}/scouting?modo=editar`}
-                    className="text-slate-400 hover:text-[#1A6BFF] text-xs font-medium transition-colors whitespace-nowrap flex-shrink-0"
-                  >
-                    ✏️ Editar
-                  </Link>
-                )}
-              </div>
+            <div className="flex-1 min-w-0 w-full">
+              <h1 className="text-slate-900 text-xl sm:text-2xl font-semibold pr-0 sm:pr-16">{paciente.nombre}</h1>
 
               {esFamilia && editandoApodo ? (
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                <div className="flex items-center justify-center sm:justify-start gap-2 mt-1.5 flex-wrap">
                   <input
                     type="text"
                     autoFocus
@@ -604,7 +602,7 @@ export default function ExpedientePaciente() {
                   </button>
                 </div>
               ) : (
-                <p className="text-slate-500 text-sm mt-1 flex items-center gap-2 flex-wrap">
+                <p className="text-slate-500 text-sm mt-1 flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                   {calcularEdad(paciente.fecha_nacimiento)} años · {paciente.sexo || "—"} · Sangre {paciente.tipo_sangre || "no especificada"}
                   {paciente.apodo && (
                     <span className="text-xs bg-blue-50 text-[#1A6BFF] px-2 py-0.5 rounded-full border border-blue-100">
@@ -620,7 +618,7 @@ export default function ExpedientePaciente() {
               )}
 
               {paciente.diagnosticos_principales?.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-3">
+                <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-3">
                   {paciente.diagnosticos_principales.map((dx: string, i: number) => (
                     <span key={i} className="text-xs bg-blue-50 text-[#1A6BFF] px-2 py-1 rounded-full border border-blue-100">
                       {dx}
@@ -632,9 +630,9 @@ export default function ExpedientePaciente() {
           </div>
 
           {paciente.alergias?.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="mt-4 pt-4 border-t border-slate-100 text-center sm:text-left">
               <p className="text-red-600 text-xs font-semibold mb-2">⚠️ Alergias conocidas</p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap justify-center sm:justify-start gap-2">
                 {paciente.alergias.map((a: string, i: number) => (
                   <span key={i} className="text-xs bg-red-50 text-red-600 border border-red-100 px-2 py-1 rounded-full">
                     {a}
@@ -645,19 +643,21 @@ export default function ExpedientePaciente() {
           )}
 
           {puedeVerExpedienteCompleto && (
-            <button
-              type="button"
-              onClick={() => setExpedienteAbierto(!expedienteAbierto)}
-              className="mt-4 w-full flex items-center justify-center gap-1.5 text-[#1A6BFF] text-sm font-semibold py-2.5 hover:underline transition-colors"
-            >
-              Ver expediente completo
-              <span className={`inline-block transition-transform ${expedienteAbierto ? 'rotate-180' : ''}`}>▾</span>
-            </button>
+            <div className="mt-4 pt-4 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setExpedienteAbierto(!expedienteAbierto)}
+                className="w-full flex items-center justify-center gap-1.5 text-[#1A6BFF] text-sm font-semibold hover:underline transition-colors"
+              >
+                Ver expediente completo
+                <span className={`inline-block transition-transform ${expedienteAbierto ? 'rotate-180' : ''}`}>▾</span>
+              </button>
+            </div>
           )}
         </div>
 
         {puedeVerExpedienteCompleto && expedienteAbierto && (
-          <div className="mb-4">
+          <div className="bg-white border border-t-0 border-slate-200 rounded-b-2xl shadow-sm px-5 sm:px-6 pb-5 sm:pb-6 pt-4 mb-6">
             {esFamilia && (
               <div className="flex justify-end mb-2">
                 <Link
@@ -783,6 +783,15 @@ export default function ExpedientePaciente() {
                 sinBorde
               />
             </SeccionExpediente>
+
+            <button
+              type="button"
+              onClick={() => setExpedienteAbierto(false)}
+              className="w-full flex items-center justify-center gap-1.5 text-[#1A6BFF] text-sm font-semibold hover:underline transition-colors py-2"
+            >
+              Ver menos
+              <span className="inline-block rotate-180">▾</span>
+            </button>
           </div>
         )}
 
