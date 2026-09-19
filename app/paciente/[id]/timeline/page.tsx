@@ -1,310 +1,496 @@
-'use client'
+"use client";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase";
+import Link from "next/link";
+import BottomNav from "@/components/BottomNav";
 
-import { useEffect, useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
-import Link from 'next/link'
+type TipoPublicacion = 'consulta' | 'medicamento_nuevo' | 'terapia' | 'estudio' | 'anomalia_bitacora' | 'otro';
+type TipoReaccion = 'revisado' | 'confirmado' | 'requiere_ajuste' | 'prioritario' | 'corazon';
 
-type EventoTipo = 'nota' | 'medicamento' | 'documento' | 'especialista'
+type Publicacion = {
+  id: string;
+  autor_id: string;
+  tipo: TipoPublicacion;
+  medico_etiquetado_id: string | null;
+  diagnostico: string | null;
+  tratamiento: string | null;
+  proxima_cita_o_alarma: string | null;
+  exploracion: string | null;
+  estudios_solicitados: string | null;
+  nota_abierta: string | null;
+  fecha: string;
+  created_at: string;
+};
 
-type Evento = {
-  id: string
-  tipo: EventoTipo
-  titulo: string
-  descripcion: string
-  autor: string
-  fecha: string
+type Comentario = {
+  id: string;
+  autor_id: string;
+  autor_nombre: string;
+  contenido: string;
+  created_at: string;
+};
+
+type EventoInformativo = {
+  id: string;
+  tipo: 'documento' | 'especialista';
+  titulo: string;
+  descripcion: string;
+  fecha: string;
+};
+
+const LABELS_PUBLICACION: Record<TipoPublicacion, string> = {
+  consulta: 'Consulta',
+  medicamento_nuevo: 'Medicamento nuevo',
+  terapia: 'Sesión de terapia',
+  estudio: 'Estudio',
+  anomalia_bitacora: 'Aviso de bitácora',
+  otro: 'Actualización',
+};
+
+const ICONOS_PUBLICACION: Record<TipoPublicacion, string> = {
+  consulta: '🩺',
+  medicamento_nuevo: '💊',
+  terapia: '🧩',
+  estudio: '🧪',
+  anomalia_bitacora: '⚠️',
+  otro: '📌',
+};
+
+const REACCIONES: { tipo: TipoReaccion; label: string; icono: string }[] = [
+  { tipo: 'revisado', label: 'Revisado', icono: '👁️' },
+  { tipo: 'confirmado', label: 'Confirmado', icono: '✅' },
+  { tipo: 'requiere_ajuste', label: 'Requiere ajuste', icono: '⚠️' },
+  { tipo: 'prioritario', label: 'Prioritario', icono: '🚩' },
+];
+
+function formatFecha(fecha: string) {
+  return new Date(fecha + (fecha.length === 10 ? 'T12:00:00' : '')).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-const COLORES: Record<EventoTipo, { bg: string; text: string; border: string; dot: string }> = {
-  nota:         { bg: '#eff6ff', text: '#1A6BFF', border: '#93c5fd', dot: '#1A6BFF' },
-  medicamento:  { bg: '#f0fdf4', text: '#16a34a', border: '#86efac', dot: '#00C97A' },
-  documento:    { bg: '#fffbeb', text: '#b45309', border: '#fcd34d', dot: '#f59e0b' },
-  especialista: { bg: '#faf5ff', text: '#7c3aed', border: '#c4b5fd', dot: '#8b5cf6' },
-}
+function hoyISO() { return new Date().toISOString().split('T')[0]; }
 
-const LABELS: Record<EventoTipo, string> = {
-  nota:         'Nota clínica',
-  medicamento:  'Medicamento',
-  documento:    'Documento',
-  especialista: 'Especialista',
-}
+export default function HistorialMuro() {
+  const params = useParams();
+  const router = useRouter();
+  const supabase = createClient();
+  const pacienteId = params.id as string;
 
-const EMOJIS: Record<EventoTipo, string> = {
-  nota:         '📋',
-  medicamento:  '💊',
-  documento:    '📁',
-  especialista: '👤',
-}
+  const [nombreParaEquipo, setNombreParaEquipo] = useState("");
+  const [rol, setRol] = useState<string>('familia');
+  const [userId, setUserId] = useState<string>("");
+  const [cargando, setCargando] = useState(true);
 
-const TIPOS_NOTA: Record<string, string> = {
-  consulta:       'Consulta',
-  sesion_terapia: 'Sesión de terapia',
-  urgencia:       'Urgencia',
-  seguimiento:    'Seguimiento',
-  interconsulta:  'Interconsulta',
-}
+  const [publicaciones, setPublicaciones] = useState<Publicacion[]>([]);
+  const [reacciones, setReacciones] = useState<Record<string, { tipo: TipoReaccion; usuario_id: string }[]>>({});
+  const [comentarios, setComentarios] = useState<Record<string, Comentario[]>>({});
+  const [informativos, setInformativos] = useState<EventoInformativo[]>([]);
+  const [equipo, setEquipo] = useState<any[]>([]);
 
-export default function TimelinePage() {
-  const params = useParams()
-  const router = useRouter()
-  const supabase = createClient()
-  const pacienteId = params.id as string
+  const [expandido, setExpandido] = useState<string | null>(null);
+  const [nuevoComentario, setNuevoComentario] = useState<Record<string, string>>({});
 
-  const [eventos, setEventos] = useState<Evento[]>([])
-  const [paciente, setPaciente] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [filtro, setFiltro] = useState<EventoTipo | 'all'>('all')
-  const [stats, setStats] = useState({ notas: 0, medicamentos: 0, documentos: 0, especialistas: 0 })
+  const [filtro, setFiltro] = useState<'todos' | TipoPublicacion>('todos');
 
-  useEffect(() => {
-    async function cargar() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/'); return }
+  const [formAbierto, setFormAbierto] = useState(false);
+  const [medicoEtiquetado, setMedicoEtiquetado] = useState("");
+  const [fecha, setFecha] = useState(hoyISO());
+  const [diagnostico, setDiagnostico] = useState("");
+  const [tratamiento, setTratamiento] = useState("");
+  const [proximaCita, setProximaCita] = useState("");
+  const [exploracion, setExploracion] = useState("");
+  const [estudios, setEstudios] = useState("");
+  const [notaAbierta, setNotaAbierta] = useState("");
+  const [guardandoConsulta, setGuardandoConsulta] = useState(false);
+  const [errorConsulta, setErrorConsulta] = useState("");
 
-      const { data: pac } = await supabase
-        .from('pacientes').select('nombre').eq('id', pacienteId).single()
-      setPaciente(pac)
+  useEffect(() => { cargar(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-      const todos: Evento[] = []
+  async function cargar() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { router.push('/'); return; }
+    setUserId(user.id);
 
-      const { data: notas } = await supabase
-        .from('notas_clinicas')
-        .select('id, tipo_nota, motivo, plan, fecha_consulta, autor_nombre, especialidad')
-        .eq('paciente_id', pacienteId)
-        .is('deleted_at', null)
+    const { data: userData } = await supabase.from('users').select('role').eq('id', user.id).single();
+    setRol(userData?.role || user.user_metadata?.role || 'familia');
 
-      for (const n of notas || []) {
-        todos.push({
-          id:          'nota-' + n.id,
-          tipo:        'nota',
-          titulo:      TIPOS_NOTA[n.tipo_nota] || n.tipo_nota,
-          descripcion: n.motivo || n.plan || 'Sin descripcion',
-          autor:       n.autor_nombre + (n.especialidad ? ' - ' + n.especialidad : ''),
-          fecha:       n.fecha_consulta,
-        })
-      }
+    const { data: pac } = await supabase.from('pacientes').select('nombre, apodo').eq('id', pacienteId).single();
+    if (!pac) { router.push('/dashboard'); return; }
+    setNombreParaEquipo(pac.apodo || pac.nombre);
 
-      const { data: meds } = await supabase
-        .from('medicamentos_activos')
-        .select('id, nombre_medicamento, dosis, frecuencia, indicado_por, fecha_inicio, fecha_suspension, created_at')
-        .eq('paciente_id', pacienteId)
-        .is('deleted_at', null)
+    const { data: accesos } = await supabase
+      .from('expediente_accesos')
+      .select('usuario_id, created_at, users(full_name, role, especialidad)')
+      .eq('paciente_id', pacienteId)
+      .eq('estado', 'activo');
 
-      for (const m of meds || []) {
-        todos.push({
-          id:          'med-' + m.id,
-          tipo:        'medicamento',
-          titulo:      m.nombre_medicamento,
-          descripcion: (m.dosis || '') + (m.frecuencia ? ' - ' + m.frecuencia : '') || 'Sin dosis',
-          autor:       m.indicado_por || 'Sin especificar',
-          fecha:       m.fecha_inicio || m.created_at,
-        })
+    setEquipo((accesos || []).map((a: any) => ({ id: a.usuario_id, nombre: a.users?.full_name, especialidad: a.users?.especialidad })));
 
-        if (m.fecha_suspension) {
-          todos.push({
-            id:          'med-susp-' + m.id,
-            tipo:        'medicamento',
-            titulo:      m.nombre_medicamento + ' (suspendido)',
-            descripcion: 'Medicamento suspendido',
-            autor:       'Familia',
-            fecha:       m.fecha_suspension,
-          })
-        }
-      }
+    const informativosTemp: EventoInformativo[] = (accesos || []).map((a: any) => ({
+      id: 'esp-' + a.usuario_id,
+      tipo: 'especialista',
+      titulo: a.users?.full_name || 'Profesional',
+      descripcion: `Se unió al equipo · ${a.users?.especialidad || a.users?.role || ''}`,
+      fecha: a.created_at,
+    }));
 
-      const { data: docs } = await supabase
-        .from('documentos')
-        .select('id, nombre, categoria, tipo, created_at, subido_por')
-        .eq('paciente_id', pacienteId)
-        .is('deleted_at', null)
+    const { data: docs } = await supabase
+      .from('documentos')
+      .select('id, nombre, categoria, created_at')
+      .eq('paciente_id', pacienteId)
+      .is('deleted_at', null);
 
-      for (const d of docs || []) {
-        const { data: autor } = await supabase
-          .from('users').select('full_name').eq('id', d.subido_por).single()
-        todos.push({
-          id:          'doc-' + d.id,
-          tipo:        'documento',
-          titulo:      d.nombre || 'Documento',
-          descripcion: d.categoria || d.tipo || 'Sin categoria',
-          autor:       autor?.full_name || 'Familia',
-          fecha:       d.created_at,
-        })
-      }
-
-      const { data: accesos } = await supabase
-        .from('expediente_accesos')
-        .select('id, usuario_id, created_at')
-        .eq('paciente_id', pacienteId)
-        .eq('estado', 'activo')
-
-      for (const a of accesos || []) {
-        const { data: u } = await supabase
-          .from('users').select('full_name, role, especialidad').eq('id', a.usuario_id).single()
-        if (!u) continue
-        todos.push({
-          id:          'esp-' + a.id,
-          tipo:        'especialista',
-          titulo:      u.full_name || 'Profesional',
-          descripcion: u.especialidad || u.role || 'Sin especialidad',
-          autor:       'Invitado por la familia',
-          fecha:       a.created_at,
-        })
-      }
-
-      todos.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-      setEventos(todos)
-      setStats({
-        notas:        (notas || []).length,
-        medicamentos: (meds || []).length,
-        documentos:   (docs || []).length,
-        especialistas: (accesos || []).length,
-      })
-      setLoading(false)
+    for (const d of docs || []) {
+      informativosTemp.push({ id: 'doc-' + d.id, tipo: 'documento', titulo: d.nombre || 'Documento', descripcion: d.categoria || 'Documento subido', fecha: d.created_at });
     }
-    cargar()
-  }, [])
+    setInformativos(informativosTemp);
 
-  function formatFecha(fecha: string) {
-    return new Date(fecha).toLocaleDateString('es-MX', {
-      day: 'numeric', month: 'long', year: 'numeric'
-    })
+    const { data: pubs } = await supabase
+      .from('publicaciones')
+      .select('id, autor_id, tipo, medico_etiquetado_id, diagnostico, tratamiento, proxima_cita_o_alarma, exploracion, estudios_solicitados, nota_abierta, fecha, created_at')
+      .eq('paciente_id', pacienteId)
+      .is('deleted_at', null)
+      .order('fecha', { ascending: false });
+
+    const listaPubs = (pubs || []) as Publicacion[];
+    setPublicaciones(listaPubs);
+
+    if (listaPubs.length > 0) {
+      const ids = listaPubs.map(p => p.id);
+
+      const { data: reaccionesData } = await supabase
+        .from('reacciones_publicacion')
+        .select('publicacion_id, usuario_id, tipo')
+        .in('publicacion_id', ids);
+
+      const mapaReacciones: Record<string, { tipo: TipoReaccion; usuario_id: string }[]> = {};
+      for (const r of reaccionesData || []) {
+        if (!mapaReacciones[r.publicacion_id]) mapaReacciones[r.publicacion_id] = [];
+        mapaReacciones[r.publicacion_id].push({ tipo: r.tipo, usuario_id: r.usuario_id });
+      }
+      setReacciones(mapaReacciones);
+
+      const { data: comentariosData } = await supabase
+        .from('comentarios_publicacion')
+        .select('id, publicacion_id, autor_id, contenido, created_at, users(full_name)')
+        .in('publicacion_id', ids)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: true });
+
+      const mapaComentarios: Record<string, Comentario[]> = {};
+      for (const c of (comentariosData || []) as any[]) {
+        if (!mapaComentarios[c.publicacion_id]) mapaComentarios[c.publicacion_id] = [];
+        mapaComentarios[c.publicacion_id].push({
+          id: c.id, autor_id: c.autor_id, autor_nombre: c.users?.full_name || 'Familia', contenido: c.contenido, created_at: c.created_at,
+        });
+      }
+      setComentarios(mapaComentarios);
+    }
+
+    setCargando(false);
   }
 
-  const eventosFiltrados = filtro === 'all' ? eventos : eventos.filter(e => e.tipo === filtro)
+  async function alternarReaccion(publicacionId: string, tipo: TipoReaccion) {
+    const propia = (reacciones[publicacionId] || []).find(r => r.usuario_id === userId);
 
-  if (loading) return (
-    <main className="min-h-screen bg-white flex items-center justify-center">
-      <p className="text-slate-400">Cargando timeline...</p>
-    </main>
-  )
+    if (propia?.tipo === tipo) {
+      await supabase.from('reacciones_publicacion').delete().eq('publicacion_id', publicacionId).eq('usuario_id', userId);
+      setReacciones(prev => ({ ...prev, [publicacionId]: (prev[publicacionId] || []).filter(r => r.usuario_id !== userId) }));
+      return;
+    }
+
+    await supabase.from('reacciones_publicacion').upsert(
+      { publicacion_id: publicacionId, usuario_id: userId, tipo },
+      { onConflict: 'publicacion_id,usuario_id' }
+    );
+
+    setReacciones(prev => ({
+      ...prev,
+      [publicacionId]: [...(prev[publicacionId] || []).filter(r => r.usuario_id !== userId), { tipo, usuario_id: userId }],
+    }));
+  }
+
+  async function enviarComentario(publicacionId: string) {
+    const contenido = (nuevoComentario[publicacionId] || "").trim();
+    if (!contenido) return;
+
+    const { data, error } = await supabase
+      .from('comentarios_publicacion')
+      .insert({ publicacion_id: publicacionId, autor_id: userId, contenido })
+      .select('id, autor_id, contenido, created_at, users(full_name)')
+      .single();
+
+    if (!error && data) {
+      const nuevo: Comentario = {
+        id: data.id, autor_id: data.autor_id, autor_nombre: (data as any).users?.full_name || 'Tú', contenido: data.contenido, created_at: data.created_at,
+      };
+      setComentarios(prev => ({ ...prev, [publicacionId]: [...(prev[publicacionId] || []), nuevo] }));
+      setNuevoComentario(prev => ({ ...prev, [publicacionId]: "" }));
+    }
+  }
+
+  async function registrarConsulta() {
+    setErrorConsulta("");
+    if (!diagnostico.trim() || !tratamiento.trim() || !proximaCita.trim()) {
+      setErrorConsulta("Los 3 campos esenciales son obligatorios.");
+      return;
+    }
+    setGuardandoConsulta(true);
+
+    const { data, error } = await supabase.from('publicaciones').insert({
+      paciente_id: pacienteId,
+      autor_id: userId,
+      tipo: 'consulta',
+      medico_etiquetado_id: medicoEtiquetado || null,
+      diagnostico: diagnostico.trim(),
+      tratamiento: tratamiento.trim(),
+      proxima_cita_o_alarma: proximaCita.trim(),
+      exploracion: exploracion.trim() || null,
+      estudios_solicitados: estudios.trim() || null,
+      nota_abierta: notaAbierta.trim() || null,
+      fecha,
+    }).select().single();
+
+    if (error || !data) {
+      setErrorConsulta("No se pudo guardar. Intenta de nuevo.");
+      setGuardandoConsulta(false);
+      return;
+    }
+
+    setPublicaciones(prev => [data as Publicacion, ...prev]);
+    setFormAbierto(false);
+    setMedicoEtiquetado(""); setDiagnostico(""); setTratamiento(""); setProximaCita("");
+    setExploracion(""); setEstudios(""); setNotaAbierta(""); setFecha(hoyISO());
+    setGuardandoConsulta(false);
+  }
+
+  if (cargando) {
+    return (
+      <main className="min-h-screen bg-white flex items-center justify-center">
+        <p className="text-slate-400">Cargando...</p>
+      </main>
+    );
+  }
+
+  const esFamilia = rol === 'familia';
+
+  // Combina publicaciones + eventos informativos en un solo feed cronológico
+  type ItemFeed = { fecha: string; publicacion?: Publicacion; informativo?: EventoInformativo };
+  let feed: ItemFeed[] = [
+    ...publicaciones.map(p => ({ fecha: p.fecha, publicacion: p })),
+    ...(filtro === 'todos' ? informativos.map(i => ({ fecha: i.fecha, informativo: i })) : []),
+  ];
+  if (filtro !== 'todos') feed = feed.filter(f => f.publicacion?.tipo === filtro);
+  feed.sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
+
+  const stats = {
+    consultas: publicaciones.filter(p => p.tipo === 'consulta').length,
+    medicamentos: publicaciones.filter(p => p.tipo === 'medicamento_nuevo').length,
+    documentos: informativos.filter(i => i.tipo === 'documento').length,
+    especialistas: informativos.filter(i => i.tipo === 'especialista').length,
+  };
 
   return (
-    <main className="min-h-screen bg-white">
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#1A6BFF] flex items-center justify-center">
-            <span className="text-white font-bold text-xs">S</span>
-          </div>
-          <span className="text-slate-900 font-bold text-lg tracking-tight">
-            Syncro<span className="text-[#1A6BFF]">Medic</span>
-          </span>
-        </div>
-        <Link href={'/paciente/' + pacienteId} className="text-slate-500 hover:text-slate-900 text-sm transition-colors">
-          Regresar
-        </Link>
-      </nav>
+    <main className="min-h-screen bg-white pb-24">
+      <div className="max-w-lg mx-auto px-4 pt-6">
+        <p className="text-[#00C97A] text-[11px] font-semibold tracking-wide uppercase mb-0.5">Historial</p>
+        <h1 className="text-slate-900 text-xl font-semibold mb-4">{nombreParaEquipo}</h1>
 
-      <div className="max-w-3xl mx-auto px-6 py-10">
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-slate-900">Timeline medico</h1>
-          <p className="text-slate-500 text-sm mt-1">{paciente?.nombre} - Historial cronologico del expediente</p>
-        </div>
-
-        <div className="grid grid-cols-4 gap-1.5 sm:gap-3 mb-8">
+        <div className="grid grid-cols-4 gap-2 mb-4">
           {[
-            { label: 'Notas',        value: stats.notas,        color: '#1A6BFF' },
-            { label: 'Medicamentos', value: stats.medicamentos, color: '#00C97A' },
-            { label: 'Documentos',   value: stats.documentos,   color: '#f59e0b' },
-            { label: 'Especialistas',value: stats.especialistas, color: '#8b5cf6' },
+            { label: 'Consultas', value: stats.consultas },
+            { label: 'Medicam.', value: stats.medicamentos },
+            { label: 'Docs.', value: stats.documentos },
+            { label: 'Especial.', value: stats.especialistas },
           ].map(s => (
-            <div key={s.label} className="bg-slate-50 border border-slate-200 rounded-xl px-1 py-3 text-center">
-              <div className="text-xl font-semibold" style={{ color: s.color }}>{s.value}</div>
-              <div className="text-[10.5px] sm:text-xs text-slate-400 mt-0.5 leading-tight break-words">{s.label}</div>
+            <div key={s.label} className="bg-slate-50 rounded-xl text-center py-2.5">
+              <p className="text-slate-900 text-base font-semibold">{s.value}</p>
+              <p className="text-slate-400 text-[10px]">{s.label}</p>
             </div>
           ))}
         </div>
 
-        <div
-          className="flex gap-2 overflow-x-auto scrollbar-none -mx-1 px-1 mb-8 cursor-grab active:cursor-grabbing select-none"
-          onMouseDown={(e) => {
-            const el = e.currentTarget
-            const startX = e.pageX - el.offsetLeft
-            const startScroll = el.scrollLeft
-            function mover(ev: MouseEvent) {
-              el.scrollLeft = startScroll - (ev.pageX - el.offsetLeft - startX)
-            }
-            function soltar() {
-              window.removeEventListener('mousemove', mover)
-              window.removeEventListener('mouseup', soltar)
-            }
-            window.addEventListener('mousemove', mover)
-            window.addEventListener('mouseup', soltar)
-          }}
-        >
-          <button
-            onClick={() => setFiltro('all')}
-            className={'flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium border transition-all ' + (filtro === 'all' ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200')}
-          >
-            Todos
-          </button>
-          {(['nota', 'medicamento', 'documento', 'especialista'] as EventoTipo[]).map(t => (
+        <div className="flex gap-1.5 overflow-x-auto mb-5 pb-1">
+          {([
+            { value: 'todos', label: 'Todos' },
+            { value: 'consulta', label: '🩺 Consulta' },
+            { value: 'medicamento_nuevo', label: '💊 Medicamento' },
+            { value: 'terapia', label: '🧩 Terapia' },
+            { value: 'estudio', label: '🧪 Estudio' },
+          ] as { value: 'todos' | TipoPublicacion; label: string }[]).map(f => (
             <button
-              key={t}
-              onClick={() => setFiltro(t)}
-              style={filtro === t ? { background: COLORES[t].bg, color: COLORES[t].text, borderColor: COLORES[t].border } : {}}
-              className={'flex-shrink-0 whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium border transition-all ' + (filtro === t ? '' : 'bg-white text-slate-500 border-slate-200')}
+              key={f.value}
+              onClick={() => setFiltro(f.value)}
+              className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 rounded-full text-xs font-medium ${filtro === f.value ? "bg-[#1A6BFF] text-white" : "bg-slate-50 text-slate-500"}`}
             >
-              {EMOJIS[t]} {LABELS[t]}
+              {f.label}
             </button>
           ))}
         </div>
-        <style jsx>{`
-          .scrollbar-none::-webkit-scrollbar { display: none; }
-          .scrollbar-none { scrollbar-width: none; -ms-overflow-style: none; }
-        `}</style>
 
-        {eventosFiltrados.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-4xl mb-4">📭</p>
-            <p className="text-slate-500">No hay eventos de este tipo aun.</p>
-          </div>
+        {esFamilia && (
+          !formAbierto ? (
+            <button
+              onClick={() => setFormAbierto(true)}
+              className="w-full border border-dashed border-blue-200 bg-blue-50/40 rounded-2xl p-3.5 flex items-center justify-center gap-2.5 text-[#1A6BFF] text-sm font-medium mb-5"
+            >
+              <span className="text-lg">🩺</span> Registrar consulta
+            </button>
+          ) : (
+            <div className="bg-slate-50 rounded-2xl p-4 mb-5">
+              <p className="text-slate-400 text-[11px] uppercase tracking-wide mb-3">Registrar consulta</p>
+
+              <label className="text-slate-500 text-xs block mb-1.5">Médico o especialista (opcional, le llega notificación)</label>
+              <select value={medicoEtiquetado} onChange={e => setMedicoEtiquetado(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm mb-3 focus:outline-none focus:border-[#1A6BFF]">
+                <option value="">Sin etiquetar</option>
+                {equipo.map(m => <option key={m.id} value={m.id}>{m.nombre}{m.especialidad ? ` · ${m.especialidad}` : ''}</option>)}
+              </select>
+
+              <label className="text-slate-500 text-xs block mb-1.5">Fecha</label>
+              <input type="date" value={fecha} onChange={e => setFecha(e.target.value)}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-white text-slate-800 text-sm mb-4 focus:outline-none focus:border-[#1A6BFF]" />
+
+              <p className="text-[#1A6BFF] text-[10px] font-semibold uppercase tracking-wide mb-2">Lo esencial</p>
+
+              <label className="text-slate-500 text-xs block mb-1">Diagnóstico o sospecha *</label>
+              <textarea value={diagnostico} onChange={e => setDiagnostico(e.target.value)} rows={2}
+                placeholder="¿Qué te dijo el médico?"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white text-sm mb-3 resize-none focus:outline-none focus:border-[#1A6BFF]" />
+
+              <label className="text-slate-500 text-xs block mb-1">Tratamiento indicado *</label>
+              <textarea value={tratamiento} onChange={e => setTratamiento(e.target.value)} rows={2}
+                placeholder="Medicamento, dosis, duración — o 'sin cambios'"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white text-sm mb-3 resize-none focus:outline-none focus:border-[#1A6BFF]" />
+
+              <label className="text-slate-500 text-xs block mb-1">Próxima cita / signos de alarma *</label>
+              <textarea value={proximaCita} onChange={e => setProximaCita(e.target.value)} rows={2}
+                placeholder="Cuándo regresar, o qué vigilar"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white text-sm mb-4 resize-none focus:outline-none focus:border-[#1A6BFF]" />
+
+              <p className="text-slate-400 text-[10px] uppercase tracking-wide mb-2">Opcional</p>
+
+              <label className="text-slate-500 text-xs block mb-1">Qué revisó o exploró</label>
+              <textarea value={exploracion} onChange={e => setExploracion(e.target.value)} rows={2}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white text-sm mb-3 resize-none focus:outline-none focus:border-[#1A6BFF]" />
+
+              <label className="text-slate-500 text-xs block mb-1">Estudios solicitados</label>
+              <textarea value={estudios} onChange={e => setEstudios(e.target.value)} rows={2}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white text-sm mb-3 resize-none focus:outline-none focus:border-[#1A6BFF]" />
+
+              <label className="text-slate-500 text-xs block mb-1">Nota abierta</label>
+              <textarea value={notaAbierta} onChange={e => setNotaAbierta(e.target.value)} rows={2}
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 bg-white text-sm mb-3 resize-none focus:outline-none focus:border-[#1A6BFF]" />
+
+              {errorConsulta && <p className="text-red-500 text-xs mb-3">{errorConsulta}</p>}
+
+              <div className="flex gap-3">
+                <button onClick={() => setFormAbierto(false)} className="flex-1 border border-slate-200 text-slate-600 text-sm font-medium py-2.5 rounded-xl">Cancelar</button>
+                <button onClick={registrarConsulta} disabled={guardandoConsulta}
+                  className="flex-1 bg-[#1A6BFF] hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-xl">
+                  {guardandoConsulta ? "Guardando..." : "Guardar"}
+                </button>
+              </div>
+            </div>
+          )
+        )}
+
+        {feed.length === 0 ? (
+          <p className="text-slate-300 text-sm text-center py-10">No hay eventos todavía</p>
         ) : (
-          <div>
-            {eventosFiltrados.map((evento, idx) => {
-              const c = COLORES[evento.tipo]
-              const esUltimo = idx === eventosFiltrados.length - 1
-              return (
-                <div key={evento.id} className="flex gap-4">
-                  <div className="flex flex-col items-center flex-shrink-0 w-5">
-                    <div
-                      className="w-3 h-3 rounded-full flex-shrink-0 mt-1"
-                      style={{ background: c.dot, boxShadow: '0 0 0 2px white, 0 0 0 3px ' + c.dot }}
-                    />
-                    {!esUltimo && <div className="w-px flex-1 bg-slate-200 my-1" />}
+          <div className="flex flex-col gap-3">
+            {feed.map(item => {
+              if (item.informativo) {
+                const info = item.informativo;
+                return (
+                  <div key={info.id} className="bg-slate-50 rounded-2xl p-4 opacity-70">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-500">{info.tipo === 'documento' ? '📁' : '👤'} {info.titulo}</span>
+                      <span className="text-[10px] text-slate-400">{formatFecha(info.fecha)}</span>
+                    </div>
+                    <p className="text-slate-400 text-xs">{info.descripcion}</p>
                   </div>
-                  <div className="flex-1 pb-5">
-                    <div className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-sm transition-shadow">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <span
-                          className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                          style={{ background: c.bg, color: c.text }}
+                );
+              }
+
+              const pub = item.publicacion!;
+              const misReacciones = reacciones[pub.id] || [];
+              const miReaccion = misReacciones.find(r => r.usuario_id === userId)?.tipo;
+              const conteo: Partial<Record<TipoReaccion, number>> = {};
+              for (const r of misReacciones) conteo[r.tipo] = (conteo[r.tipo] || 0) + 1;
+              const listaComentarios = comentarios[pub.id] || [];
+              const abierto = expandido === pub.id;
+
+              return (
+                <div key={pub.id} className="bg-slate-50 rounded-2xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-[#1A6BFF] flex items-center gap-1.5">
+                      {ICONOS_PUBLICACION[pub.tipo]} {LABELS_PUBLICACION[pub.tipo]}
+                    </span>
+                    <span className="text-[10px] text-slate-400">{formatFecha(pub.fecha)}</span>
+                  </div>
+
+                  {pub.diagnostico && <p className="text-slate-800 text-sm mb-1"><span className="text-slate-400">Diagnóstico:</span> {pub.diagnostico}</p>}
+                  {pub.tratamiento && <p className="text-slate-800 text-sm mb-1"><span className="text-slate-400">Tratamiento:</span> {pub.tratamiento}</p>}
+                  {pub.proxima_cita_o_alarma && <p className="text-slate-600 text-xs mb-1">📅 {pub.proxima_cita_o_alarma}</p>}
+                  {pub.exploracion && <p className="text-slate-500 text-xs mb-1">Exploración: {pub.exploracion}</p>}
+                  {pub.estudios_solicitados && <p className="text-slate-500 text-xs mb-1">Estudios: {pub.estudios_solicitados}</p>}
+                  {pub.nota_abierta && <p className="text-slate-500 text-xs italic mt-1.5">{pub.nota_abierta}</p>}
+
+                  <div className="flex gap-1.5 flex-wrap mt-3 pt-3 border-t border-slate-100">
+                    {pub.tipo === 'terapia' ? (
+                      <button
+                        onClick={() => alternarReaccion(pub.id, 'corazon')}
+                        className={`text-xs px-2.5 py-1 rounded-full ${miReaccion === 'corazon' ? "bg-red-50 text-red-500" : "bg-white text-slate-400 border border-slate-200"}`}
+                      >
+                        ❤️ {conteo.corazon || ''}
+                      </button>
+                    ) : (
+                      REACCIONES.map(r => (
+                        <button
+                          key={r.tipo}
+                          onClick={() => alternarReaccion(pub.id, r.tipo)}
+                          className={`text-xs px-2.5 py-1 rounded-full ${miReaccion === r.tipo ? "bg-blue-50 text-[#1A6BFF] border border-[#1A6BFF]" : "bg-white text-slate-400 border border-slate-200"}`}
                         >
-                          {EMOJIS[evento.tipo]} {LABELS[evento.tipo]}
-                        </span>
-                        <span className="text-xs text-slate-400 whitespace-nowrap flex-shrink-0">
-                          {formatFecha(evento.fecha)}
-                        </span>
-                      </div>
-                      <p className="text-slate-900 font-semibold text-sm mb-1">{evento.titulo}</p>
-                      <p className="text-slate-500 text-sm">{evento.descripcion}</p>
-                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-slate-100">
-                        <div
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                          style={{ background: c.bg, color: c.text }}
-                        >
-                          {evento.autor.charAt(0)}
+                          {r.icono} {conteo[r.tipo] || ''}
+                        </button>
+                      ))
+                    )}
+                  </div>
+
+                  <button onClick={() => setExpandido(abierto ? null : pub.id)} className="text-slate-400 text-xs mt-2.5">
+                    {listaComentarios.length > 0 ? `💬 ${listaComentarios.length} comentario${listaComentarios.length === 1 ? '' : 's'}` : '💬 Comentar'}
+                  </button>
+
+                  {abierto && (
+                    <div className="mt-2.5 pt-2.5 border-t border-slate-100">
+                      {listaComentarios.map(c => (
+                        <div key={c.id} className="mb-2">
+                          <p className="text-slate-700 text-xs font-medium">{c.autor_nombre}</p>
+                          <p className="text-slate-600 text-xs">{c.contenido}</p>
                         </div>
-                        <span className="text-xs text-slate-400">{evento.autor}</span>
+                      ))}
+                      <div className="flex gap-2 mt-2">
+                        <input
+                          type="text"
+                          value={nuevoComentario[pub.id] || ""}
+                          onChange={e => setNuevoComentario(prev => ({ ...prev, [pub.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') enviarComentario(pub.id); }}
+                          placeholder="Escribe un comentario..."
+                          className="flex-1 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:border-[#1A6BFF]"
+                        />
+                        <button onClick={() => enviarComentario(pub.id)} className="text-[#1A6BFF] text-xs font-semibold">Enviar</button>
                       </div>
                     </div>
-                  </div>
+                  )}
                 </div>
-              )
+              );
             })}
           </div>
         )}
       </div>
+
+      <BottomNav pacienteId={pacienteId} activo="historial" />
     </main>
-  )
+  );
 }
