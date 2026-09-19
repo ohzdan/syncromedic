@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { createClient } from "@/lib/supabase";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import BottomNav from "@/components/BottomNav";
 
 type Rol = 'familia' | 'medico' | 'terapeuta' | 'centro_terapias' | 'escuela' | 'admin'
 type Consistencia = 'normal' | 'blanda' | 'dura' | 'diarrea'
@@ -34,8 +35,8 @@ function formatAntecedentesFamiliares(detalle: Record<string, string[]> | undefi
 
 function SeccionExpediente({ titulo, icono, children }: { titulo: string; icono: string; children: React.ReactNode }) {
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-4">
-      <h2 className="text-slate-800 font-semibold mb-4 flex items-center gap-2">
+    <div className="mb-1">
+      <h2 className="text-slate-800 font-semibold text-sm mb-2 flex items-center gap-2 pt-3 border-t border-slate-100">
         <span>{icono}</span> {titulo}
       </h2>
       <div className="flex flex-col">{children}</div>
@@ -45,12 +46,27 @@ function SeccionExpediente({ titulo, icono, children }: { titulo: string; icono:
 
 function DatoExpediente({ label, valor, sinBorde }: { label: string; valor: string | null | undefined; sinBorde?: boolean }) {
   return (
-    <div className={`py-2.5 ${!sinBorde ? "border-b border-slate-100" : ""}`}>
-      <p className="text-slate-500 text-xs">{label}</p>
-      <p className="text-slate-800 text-sm font-medium mt-0.5">
+    <div className={`py-2 ${!sinBorde ? "border-b border-slate-50" : ""}`}>
+      <p className="text-slate-400 text-[11px]">{label}</p>
+      <p className="text-slate-700 text-sm mt-0.5">
         {valor || <span className="text-slate-300">Sin información</span>}
       </p>
     </div>
+  );
+}
+
+/** Fila de acceso dentro del acordeón (Equipo médico, Documentos, Citas médicas...) */
+function AccesoAcordeon({ href, label, icono, destacado }: { href: string; label: string; icono: string; destacado?: boolean }) {
+  return (
+    <Link
+      href={href}
+      className={`flex items-center justify-between py-3 border-b border-slate-50 last:border-b-0 no-underline ${destacado ? "text-[#1A6BFF]" : "text-slate-700"}`}
+    >
+      <span className="text-sm flex items-center gap-2">
+        <span>{icono}</span> {label}
+      </span>
+      <span className="text-slate-300 text-sm">›</span>
+    </Link>
   );
 }
 
@@ -142,20 +158,35 @@ function formatFechaCorta(fechaISO: string) {
   return new Date(fechaISO + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
 }
 
+/** "8h 10m" a partir de dos ISO. Si faltan datos, devuelve null. */
+function formatDuracion(inicioISO?: string, finISO?: string) {
+  if (!inicioISO || !finISO) return null;
+  const ms = new Date(finISO).getTime() - new Date(inicioISO).getTime();
+  if (ms <= 0) return null;
+  const horas = Math.floor(ms / 3600000);
+  const minutos = Math.round((ms % 3600000) / 60000);
+  return `${horas}h ${minutos}m`;
+}
+
+type ResumenSueno = { texto: string; noche_fecha: string } | null;
+type ResumenEvacuacion = { consistencia: Consistencia; fecha: string } | null;
+
 export default function ExpedientePaciente() {
   const [paciente, setPaciente] = useState<any>(null);
   const [rol, setRol] = useState<Rol>('familia');
   const [permisosEscuela, setPermisosEscuela] = useState({ puede_ver_medicamentos: false, puede_ver_timeline: false });
   const [loading, setLoading] = useState(true);
-  const [editandoApodo, setEditandoApodo] = useState(false);
-  const [apodoInput, setApodoInput] = useState("");
-  const [guardandoApodo, setGuardandoApodo] = useState(false);
   const [expedienteAbierto, setExpedienteAbierto] = useState(false);
   const router = useRouter();
   const params = useParams();
   const searchParams = useSearchParams();
   const supabase = createClient();
   const fotoEvacInputRef = useRef<HTMLInputElement>(null);
+
+  // Resúmenes en vivo para las tarjetas del expediente
+  const [resumenSueno, setResumenSueno] = useState<ResumenSueno>(null);
+  const [resumenEvacuacion, setResumenEvacuacion] = useState<ResumenEvacuacion>(null);
+  const [medicamentosActivosCount, setMedicamentosActivosCount] = useState<number | null>(null);
 
   // Diario combinado (sueño + evacuación + pipi nocturno)
   const [diarioAbierto, setDiarioAbierto] = useState(false);
@@ -217,36 +248,71 @@ export default function ExpedientePaciente() {
         .from("pacientes").select("*").eq("id", params.id).single();
       if (!data) { router.push("/dashboard"); return; }
       setPaciente(data);
-      setApodoInput(data.apodo || "");
       setLoading(false);
+      cargarResumenes();
     }
     cargarPaciente();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function calcularEdad(fecha: string) {
-    const hoy = new Date();
-    const nac = new Date(fecha);
-    let edad = hoy.getFullYear() - nac.getFullYear();
-    const m = hoy.getMonth() - nac.getMonth();
-    if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
-    return edad;
-  }
+  /** Trae los datos "en vivo" para las tarjetas de Sueño, Evacuación y Medicamentos. */
+  async function cargarResumenes() {
+    const pacienteId = params.id as string;
 
-  async function guardarApodo() {
-    setGuardandoApodo(true);
-    const nuevoApodo = apodoInput.trim() || null;
-    const { error } = await supabase
-      .from('pacientes')
-      .update({ apodo: nuevoApodo })
-      .eq('id', params.id);
+    // Sueño: última noche con hora_fin registrada
+    const { data: ultimoFin } = await supabase
+      .from('bitacora_registros')
+      .select('noche_fecha, hora_inicio')
+      .eq('paciente_id', pacienteId)
+      .eq('tipo', 'sueno_fin')
+      .is('deleted_at', null)
+      .order('hora_inicio', { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-    if (!error) {
-      setPaciente((prev: any) => ({ ...prev, apodo: nuevoApodo }));
-      setEditandoApodo(false);
-    } else {
-      alert('No se pudo guardar el apodo. Intenta de nuevo.');
+    if (ultimoFin) {
+      const { data: inicioMismaNoche } = await supabase
+        .from('bitacora_registros')
+        .select('hora_inicio')
+        .eq('paciente_id', pacienteId)
+        .eq('tipo', 'sueno_inicio')
+        .eq('noche_fecha', ultimoFin.noche_fecha)
+        .is('deleted_at', null)
+        .order('hora_inicio', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      const duracion = formatDuracion(inicioMismaNoche?.hora_inicio, ultimoFin.hora_inicio);
+      setResumenSueno(duracion ? { texto: duracion, noche_fecha: ultimoFin.noche_fecha } : null);
     }
-    setGuardandoApodo(false);
+
+    // Evacuación: la más reciente
+    const { data: ultimaEvac } = await supabase
+      .from('bitacora_registros')
+      .select('consistencia, hora_inicio')
+      .eq('paciente_id', pacienteId)
+      .eq('tipo', 'evacuacion')
+      .is('deleted_at', null)
+      .order('hora_inicio', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (ultimaEvac?.consistencia) {
+      setResumenEvacuacion({
+        consistencia: ultimaEvac.consistencia as Consistencia,
+        fecha: fechaHHMMDD(ultimaEvac.hora_inicio),
+      });
+    }
+
+    // Medicamentos activos: solo el conteo, para la tarjeta
+    const { count } = await supabase
+      .from('medicamentos_activos')
+      .select('id', { count: 'exact', head: true })
+      .eq('paciente_id', pacienteId)
+      .eq('activo', true)
+      .is('deleted_at', null);
+
+    setMedicamentosActivosCount(count ?? 0);
   }
 
   async function abrirDiarioParaEditar(nocheFecha: string) {
@@ -289,7 +355,12 @@ export default function ExpedientePaciente() {
 
   useEffect(() => {
     const nocheFecha = searchParams.get('editarSueno');
-    if (nocheFecha) abrirDiarioParaEditar(nocheFecha);
+    if (nocheFecha) { abrirDiarioParaEditar(nocheFecha); return; }
+    // El botón (+) del menú inferior navega aquí con ?accion=registrar
+    if (searchParams.get('accion') === 'registrar') {
+      abrirDiario();
+      router.replace(`/paciente/${params.id}`);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
@@ -341,7 +412,6 @@ export default function ExpedientePaciente() {
     setVerificando(true);
     const pacienteId = params.id as string;
 
-    // ¿Ya existe un registro de sueño para esa noche?
     const { data: sueñoExistente } = await supabase
       .from('bitacora_registros')
       .select('id')
@@ -350,7 +420,6 @@ export default function ExpedientePaciente() {
       .eq('noche_fecha', fechaDespertar)
       .is('deleted_at', null);
 
-    // ¿Ya existe una evacuación registrada ese día?
     let evacuacionExistente: any[] = [];
     if (diarioTuvoEvacuacion) {
       const { inicio: inicioDia, fin: finDia } = limitesDiaLocalUTC(fechaEvacuacion);
@@ -365,7 +434,6 @@ export default function ExpedientePaciente() {
       evacuacionExistente = data || [];
     }
 
-    // ¿Ya existe un registro de pipí nocturno para esa fecha?
     const { data: pipiExistente } = await supabase
       .from('bitacora_registros')
       .select('id')
@@ -398,10 +466,8 @@ export default function ExpedientePaciente() {
     if (!user) { setDiarioError('Sesión no válida.'); setGuardandoDiario(false); return; }
 
     const pacienteId = params.id as string;
-
-    // Si se va a sobrescribir, marcar como borrados lógicamente los registros existentes de esa noche/día
-    // (NOM-004/024: nunca DELETE físico, siempre deleted_at)
     const ahoraISO = new Date().toISOString();
+
     if (sobrescribirSueno) {
       await supabase
         .from('bitacora_registros')
@@ -432,7 +498,6 @@ export default function ExpedientePaciente() {
         .is('deleted_at', null);
     }
 
-    // 1. Se durmió
     const { error: errInicio } = await supabase.from('bitacora_registros').insert({
       paciente_id: pacienteId,
       tipo: 'sueno_inicio',
@@ -441,7 +506,6 @@ export default function ExpedientePaciente() {
       registrado_por: user.id,
     });
 
-    // 2. Despertar final
     const { error: errFin } = await supabase.from('bitacora_registros').insert({
       paciente_id: pacienteId,
       tipo: 'sueno_fin',
@@ -450,7 +514,6 @@ export default function ExpedientePaciente() {
       registrado_por: user.id,
     });
 
-    // 2b. Pipi nocturno: registro propio, con su propia fecha y nota
     const { error: errPipi } = await supabase.from('bitacora_registros').insert({
       paciente_id: pacienteId,
       tipo: 'pipi_nocturno',
@@ -461,7 +524,6 @@ export default function ExpedientePaciente() {
       registrado_por: user.id,
     });
 
-    // 2c. Despertares nocturnos: uno por cada entrada agregada, ligados a la misma noche
     let errDespertares: any = null;
     for (const d of despertares) {
       const horaInicioIso = construirFechaHora(fechaDormir, d.horaDespierto, horaDormir);
@@ -480,7 +542,6 @@ export default function ExpedientePaciente() {
       if (error) errDespertares = error;
     }
 
-    // 3. Evacuación (opcional, con foto)
     let errEvac = null;
     if (diarioTuvoEvacuacion) {
       let fotoPath: string | null = null;
@@ -516,17 +577,18 @@ export default function ExpedientePaciente() {
     setConfirmandoSobrescritura(false);
     setDiarioExito(true);
     setGuardandoDiario(false);
+    cargarResumenes();
   }
 
   if (loading) return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+    <main className="min-h-screen bg-white flex items-center justify-center">
       <p className="text-slate-400">Cargando expediente...</p>
     </main>
   );
 
   const esFamilia = rol === 'familia';
   const esEscuela = rol === 'escuela';
-  const esProfesionalClinico = !esFamilia && !esEscuela; // medico, terapeuta, centro_terapias, admin
+  const esProfesionalClinico = !esFamilia && !esEscuela;
 
   const escuelaVeMedicamentos = esEscuela && permisosEscuela.puede_ver_medicamentos;
   const escuelaVeTimeline = esEscuela && permisosEscuela.puede_ver_timeline;
@@ -535,393 +597,284 @@ export default function ExpedientePaciente() {
   const puedeVerExpedienteCompleto = esFamilia || esProfesionalClinico;
   const puedeVerTimeline = esFamilia || esProfesionalClinico || escuelaVeTimeline;
 
-  function TarjetaCompacta({ href, emoji, titulo, descripcion }: { href: string; emoji: string; titulo: string; descripcion: string }) {
-    return (
-      <Link
-        href={href}
-        className="bg-white border border-slate-200 rounded-2xl p-3 sm:p-6 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer flex flex-col items-center justify-center text-center sm:items-start sm:justify-start sm:text-left no-underline aspect-square sm:aspect-auto"
-      >
-        <p className="text-xl sm:text-2xl mb-1 sm:mb-3">{emoji}</p>
-        <h2 className="text-slate-900 font-semibold text-xs sm:text-base leading-tight mb-0 sm:mb-1">{titulo}</h2>
-        <p className="hidden sm:block text-slate-500 text-sm">{descripcion}</p>
-      </Link>
-    );
-  }
+  const iniciales = (paciente.apodo || paciente.nombre || "")
+    .split(" ")
+    .map((p: string) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
-    <main className="min-h-screen bg-slate-50">
-      <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
-        <Link href="/dashboard" className="flex items-center gap-2 no-underline">
-          <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
-            <span className="text-white font-bold text-xs">S</span>
+    <main className="min-h-screen bg-white pb-24">
+      <div className="max-w-lg mx-auto px-4 pt-6">
+
+        {/* Header: avatar + nombre */}
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <p className="text-[#00C97A] text-[11px] font-semibold tracking-wide uppercase mb-0.5">Expediente</p>
+            <h1 className="text-slate-900 text-xl font-semibold">{nombreParaEquipo}</h1>
+            <p className="text-slate-400 text-xs mt-0.5">
+              {calcularEdad(paciente.fecha_nacimiento)} años
+              {paciente.diagnosticos_principales?.length > 0 && ` · ${paciente.diagnosticos_principales.join(", ")}`}
+            </p>
           </div>
-          <span className="text-slate-900 font-bold text-lg tracking-tight">
-            Syncro<span className="text-[#00C97A]">Medic</span>
-          </span>
-        </Link>
-        <Link href="/dashboard" className="text-slate-500 hover:text-slate-900 text-sm transition-colors">
-          ← Regresar
-        </Link>
-      </nav>
+          <div className="w-11 h-11 rounded-full bg-blue-50 flex items-center justify-center text-[#1A6BFF] font-semibold text-sm flex-shrink-0">
+            {iniciales || "👤"}
+          </div>
+        </div>
 
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10">
+        {paciente.alergias?.length > 0 && (
+          <div className="bg-red-50 border border-red-100 rounded-2xl p-3 mb-4">
+            <p className="text-red-600 text-xs font-semibold mb-1.5">⚠️ Alergias conocidas</p>
+            <div className="flex flex-wrap gap-1.5">
+              {paciente.alergias.map((a: string, i: number) => (
+                <span key={i} className="text-xs bg-white text-red-600 border border-red-100 px-2 py-0.5 rounded-full">
+                  {a}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
-        {/* Header unificado: datos, apodo, diagnóstico, alergias y acceso al expediente completo */}
-        <div className={`relative bg-white border border-slate-200 p-5 sm:p-6 shadow-sm ${expedienteAbierto && puedeVerExpedienteCompleto ? 'rounded-t-2xl border-b-0' : 'rounded-2xl mb-6'}`}>
-          {esFamilia && (
-            <Link
-              href={`/paciente/${params.id}/scouting?modo=editar`}
-              className="absolute top-5 right-5 sm:top-6 sm:right-6 text-slate-400 hover:text-[#1A6BFF] text-xs font-medium transition-colors whitespace-nowrap"
-            >
-              ✏️ Editar
+        {/* Tarjetas: Sueño, Evacuación, Medicamentos */}
+        <div className="flex flex-col gap-3 mb-4">
+
+          {(esFamilia || esProfesionalClinico) && (
+            <Link href={`/paciente/${params.id}/bitacora/sueno`} className="bg-slate-50 rounded-2xl p-4 no-underline block">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-lg">😴</span>
+                <span className="text-slate-800 text-sm font-semibold">Sueño & descanso</span>
+              </div>
+              {resumenSueno ? (
+                <>
+                  <p className="text-slate-900 text-2xl font-semibold">{resumenSueno.texto}</p>
+                  <p className="text-slate-400 text-xs mt-1">Noche del {formatFechaCorta(sumarDias(resumenSueno.noche_fecha, -1))}</p>
+                </>
+              ) : (
+                <p className="text-slate-300 text-sm">Sin registros todavía</p>
+              )}
             </Link>
           )}
-          <div className="flex flex-col items-center text-center gap-3 sm:flex-row sm:items-start sm:text-left sm:gap-6">
-            <div className="w-20 h-20 sm:w-16 sm:h-16 rounded-full bg-blue-50 flex items-center justify-center text-3xl flex-shrink-0">
-              👤
-            </div>
-            <div className="flex-1 min-w-0 w-full">
-              <h1 className="text-slate-900 text-xl sm:text-2xl font-semibold pr-0 sm:pr-16">{paciente.nombre}</h1>
 
-              {esFamilia && editandoApodo ? (
-                <div className="flex items-center justify-center sm:justify-start gap-2 mt-1.5 flex-wrap">
-                  <input
-                    type="text"
-                    autoFocus
-                    value={apodoInput}
-                    onChange={(e) => setApodoInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') guardarApodo(); if (e.key === 'Escape') { setApodoInput(paciente.apodo || ""); setEditandoApodo(false); } }}
-                    placeholder="Cómo le dicen en casa (ej: Sofi)"
-                    className="border border-slate-200 rounded-lg px-2.5 py-1 text-sm text-slate-800 focus:outline-none focus:border-[#1A6BFF] transition-colors"
-                  />
-                  <button onClick={guardarApodo} disabled={guardandoApodo} className="text-[#1A6BFF] text-xs font-semibold disabled:opacity-50">
-                    {guardandoApodo ? "Guardando..." : "Guardar"}
-                  </button>
-                  <button onClick={() => { setApodoInput(paciente.apodo || ""); setEditandoApodo(false); }} className="text-slate-400 text-xs">
-                    Cancelar
-                  </button>
+          {(esFamilia || esProfesionalClinico) && (
+            <Link href={`/paciente/${params.id}/bitacora/evacuaciones`} className="bg-slate-50 rounded-2xl p-4 no-underline block">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">💧</span>
+                  <span className="text-slate-800 text-sm font-semibold">Evacuación</span>
                 </div>
-              ) : (
-                <p className="text-slate-500 text-sm mt-1 flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                  {calcularEdad(paciente.fecha_nacimiento)} años · {paciente.sexo || "—"} · Sangre {paciente.tipo_sangre || "no especificada"}
-                  {paciente.apodo && (
-                    <span className="text-xs bg-blue-50 text-[#1A6BFF] px-2 py-0.5 rounded-full border border-blue-100">
-                      "{paciente.apodo}"
-                    </span>
-                  )}
-                  {esFamilia && (
-                    <button onClick={() => setEditandoApodo(true)} className="text-slate-400 hover:text-[#1A6BFF] text-xs transition-colors">
-                      {paciente.apodo ? "editar cómo le dicen" : "+ agregar cómo le dicen"}
-                    </button>
-                  )}
-                </p>
-              )}
-
-              {paciente.diagnosticos_principales?.length > 0 && (
-                <div className="flex flex-wrap justify-center sm:justify-start gap-2 mt-3">
-                  {paciente.diagnosticos_principales.map((dx: string, i: number) => (
-                    <span key={i} className="text-xs bg-blue-50 text-[#1A6BFF] px-2 py-1 rounded-full border border-blue-100">
-                      {dx}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {paciente.alergias?.length > 0 && (
-            <div className="mt-4 pt-4 border-t border-slate-100 text-center sm:text-left">
-              <p className="text-red-600 text-xs font-semibold mb-2">⚠️ Alergias conocidas</p>
-              <div className="flex flex-wrap justify-center sm:justify-start gap-2">
-                {paciente.alergias.map((a: string, i: number) => (
-                  <span key={i} className="text-xs bg-red-50 text-red-600 border border-red-100 px-2 py-1 rounded-full">
-                    {a}
+                {resumenEvacuacion && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-50 text-green-700">
+                    {CONSISTENCIA_LABELS[resumenEvacuacion.consistencia]}
                   </span>
-                ))}
+                )}
               </div>
-            </div>
+              {resumenEvacuacion ? (
+                <p className="text-slate-500 text-xs">{formatFechaCorta(resumenEvacuacion.fecha)}</p>
+              ) : (
+                <p className="text-slate-300 text-sm">Sin registros todavía</p>
+              )}
+            </Link>
           )}
 
+          {(esFamilia || esProfesionalClinico || escuelaVeMedicamentos) && (
+            <Link href={`/paciente/${params.id}/medicamentos`} className="bg-slate-50 rounded-2xl p-4 no-underline block">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">💊</span>
+                  <span className="text-slate-800 text-sm font-semibold">Medicamentos</span>
+                </div>
+                <span className="text-slate-500 text-sm">{medicamentosActivosCount ?? "…"} activo{medicamentosActivosCount === 1 ? "" : "s"}</span>
+              </div>
+            </Link>
+          )}
+
+          {/* Ver expediente completo — acordeón */}
           {puedeVerExpedienteCompleto && (
-            <div className="mt-4 pt-4 border-t border-slate-100">
+            <div className="bg-slate-50 rounded-2xl overflow-hidden">
               <button
                 type="button"
                 onClick={() => setExpedienteAbierto(!expedienteAbierto)}
-                className="w-full flex items-center justify-center gap-1.5 text-[#1A6BFF] text-sm font-semibold hover:underline transition-colors"
+                className="w-full flex items-center justify-between p-4"
               >
-                Ver expediente completo
-                <span className={`inline-block transition-transform ${expedienteAbierto ? 'rotate-180' : ''}`}>▾</span>
+                <span className="text-slate-800 text-sm font-semibold">Ver expediente completo</span>
+                <span className={`text-slate-400 inline-block transition-transform ${expedienteAbierto ? 'rotate-180' : ''}`}>▾</span>
               </button>
+
+              {expedienteAbierto && (
+                <div className="px-4 pb-4">
+                  {esFamilia && (
+                    <div className="flex justify-end mb-1">
+                      <Link href={`/paciente/${params.id}/scouting?modo=editar`} className="text-[#1A6BFF] text-xs font-medium">
+                        ✏️ Editar
+                      </Link>
+                    </div>
+                  )}
+
+                  <SeccionExpediente titulo="Datos generales" icono="👤">
+                    <DatoExpediente label="Diagnósticos" valor={paciente.diagnosticos_principales?.join(", ")} />
+                    <DatoExpediente label="Alergias" valor={paciente.alergias?.join(", ")} />
+                    <DatoExpediente label="Tipo de sangre" valor={paciente.tipo_sangre} />
+                    <DatoExpediente label="Lateralidad" valor={paciente.lateralidad} sinBorde />
+                  </SeccionExpediente>
+
+                  <SeccionExpediente titulo="Embarazo y nacimiento" icono="🤰">
+                    <DatoExpediente label="Embarazo de alto riesgo" valor={paciente.embarazo_alto_riesgo} />
+                    <DatoExpediente
+                      label="Complicaciones del embarazo"
+                      valor={[
+                        paciente.complicaciones_embarazo && `Complicaciones: ${paciente.complicaciones_embarazo}`,
+                        paciente.diabetes_gestacional && `Diabetes gestacional: ${paciente.diabetes_gestacional}`,
+                      ].filter(Boolean).join(" · ") || null}
+                    />
+                    <DatoExpediente label="Semanas de gestación" valor={paciente.semanas_gestacion?.toString()} />
+                    <DatoExpediente label="Tipo de parto" valor={paciente.tipo_parto} />
+                    <DatoExpediente
+                      label="Complicaciones al nacer"
+                      valor={[
+                        paciente.complicaciones_nacimiento && `Complicaciones: ${paciente.complicaciones_nacimiento}`,
+                        paciente.peso_nacer && `Peso: ${paciente.peso_nacer}`,
+                      ].filter(Boolean).join(" · ") || null}
+                    />
+                    <DatoExpediente
+                      label="UCIN y APGAR"
+                      valor={[
+                        paciente.requirio_ucin && `UCIN: ${paciente.requirio_ucin}`,
+                        paciente.apgar && `APGAR: ${paciente.apgar}`,
+                      ].filter(Boolean).join(" · ") || null}
+                    />
+                    <DatoExpediente
+                      label="Tamices neonatales"
+                      valor={[paciente.tamiz_metabolico, paciente.tamiz_auditivo, paciente.tamiz_cardiaco].filter(Boolean).join(" · ") || null}
+                      sinBorde
+                    />
+                  </SeccionExpediente>
+
+                  <SeccionExpediente titulo="Desarrollo" icono="📈">
+                    <DatoExpediente
+                      label="Desarrollo motor"
+                      valor={
+                        paciente.desarrollo_motor
+                          ? [
+                              paciente.desarrollo_motor.cabeza && `Sostuvo cabeza: ${paciente.desarrollo_motor.cabeza}`,
+                              paciente.desarrollo_motor.sentado && `Se sentó: ${paciente.desarrollo_motor.sentado}`,
+                              paciente.desarrollo_motor.gateo && `Gateo: ${paciente.desarrollo_motor.gateo}`,
+                              paciente.desarrollo_motor.camino && `Caminó: ${paciente.desarrollo_motor.camino}`,
+                              paciente.desarrollo_motor.retraso && `Retraso reportado: ${paciente.desarrollo_motor.retraso}`,
+                            ].filter(Boolean).join(" · ") || null
+                          : null
+                      }
+                    />
+                    <DatoExpediente
+                      label="Desarrollo del lenguaje"
+                      valor={
+                        paciente.desarrollo_lenguaje
+                          ? [
+                              paciente.desarrollo_lenguaje.primeras_palabras && `Primeras palabras: ${paciente.desarrollo_lenguaje.primeras_palabras}`,
+                              paciente.desarrollo_lenguaje.retraso && `Retraso reportado: ${paciente.desarrollo_lenguaje.retraso}`,
+                              paciente.desarrollo_lenguaje.regresiones && `Regresiones: ${paciente.desarrollo_lenguaje.regresiones}`,
+                            ].filter(Boolean).join(" · ") || null
+                          : null
+                      }
+                    />
+                    <DatoExpediente label="Terapias actuales" valor={paciente.terapias_actuales?.join(", ")} sinBorde />
+                  </SeccionExpediente>
+
+                  <SeccionExpediente titulo="Antecedentes y condiciones" icono="📋">
+                    <DatoExpediente label="Antecedentes familiares" valor={formatAntecedentesFamiliares(paciente.antecedentes_familiares_detalle)} />
+                    <DatoExpediente
+                      label="Historial médico"
+                      valor={[paciente.cirugias_previas, paciente.hospitalizaciones_previas].filter(Boolean).join(" · ") || null}
+                    />
+                    <DatoExpediente label="Condiciones crónicas" valor={paciente.condiciones_cronicas?.join(", ")} sinBorde />
+                  </SeccionExpediente>
+
+                  <SeccionExpediente titulo="Vacunas" icono="💉">
+                    <DatoExpediente
+                      label="Vacunas registradas"
+                      valor={paciente.vacunas?.lista?.length ? paciente.vacunas.lista.join(", ") : null}
+                    />
+                    <DatoExpediente label="Otras vacunas" valor={paciente.vacunas_otras} sinBorde />
+                  </SeccionExpediente>
+
+                  <SeccionExpediente titulo="Rutinas diarias" icono="🌙">
+                    <DatoExpediente
+                      label="Sueño"
+                      valor={paciente.sueno_hora_dormir ? `Duerme ${paciente.sueno_hora_dormir} · Despierta ${paciente.sueno_hora_despertar}${paciente.sueno_colecho ? ` · Colecho: ${paciente.sueno_colecho}` : ""}` : null}
+                    />
+                    <DatoExpediente label="Alimentación" valor={paciente.alimentacion_notas} sinBorde />
+                  </SeccionExpediente>
+
+                  <SeccionExpediente titulo="Entorno familiar" icono="🏠">
+                    <DatoExpediente label="Con quién vive" valor={paciente.con_quien_vive} />
+                    <DatoExpediente label="Hermanos" valor={paciente.hermanos} />
+                    <DatoExpediente label="Escuela" valor={paciente.escuela_regular} sinBorde />
+                  </SeccionExpediente>
+
+                  <SeccionExpediente titulo="Contacto de emergencia" icono="🚨">
+                    <DatoExpediente label="Nombre" valor={paciente.contacto_emergencia?.nombre} />
+                    <DatoExpediente
+                      label="Teléfono y parentesco"
+                      valor={[paciente.contacto_emergencia?.telefono, paciente.contacto_emergencia?.parentesco].filter(Boolean).join(" · ") || null}
+                    />
+                    <DatoExpediente label="Hospital de preferencia" valor={paciente.hospital_preferencia} />
+                    <DatoExpediente label="Médico de cabecera" valor={paciente.medico_cabecera} />
+                    <DatoExpediente
+                      label="Seguro médico"
+                      valor={paciente.seguro_medico === "Sí" ? `Sí${paciente.aseguradora ? ` — ${paciente.aseguradora}` : ""}` : paciente.seguro_medico}
+                      sinBorde
+                    />
+                  </SeccionExpediente>
+
+                  {/* Accesos que se quedaron fuera del menú principal por ser de uso poco frecuente */}
+                  <div className="pt-3 border-t border-slate-100 mt-1">
+                    {esFamilia && (
+                      <AccesoAcordeon href={`/paciente/${params.id}/equipo`} icono="🩺" label={`Equipo de ${nombreParaEquipo}`} destacado />
+                    )}
+                    {(esFamilia || esProfesionalClinico) && (
+                      <AccesoAcordeon href={`/paciente/${params.id}/documentos`} icono="📁" label="Documentos" destacado />
+                    )}
+                    {esFamilia && (
+                      <AccesoAcordeon href={`/paciente/${params.id}/citas`} icono="📅" label="Citas médicas" destacado />
+                    )}
+                    {esFamilia && (
+                      <AccesoAcordeon href={`/paciente/${params.id}/bitacora-familiar`} icono="📝" label="Bitácora familiar" />
+                    )}
+                    {esProfesionalClinico && (
+                      <AccesoAcordeon href={`/paciente/${params.id}/notas`} icono="📋" label="Notas clínicas" />
+                    )}
+                    {(esFamilia || esEscuela) && (
+                      <AccesoAcordeon href={`/paciente/${params.id}/recomendaciones`} icono="📝" label="Recomendaciones" />
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
-        </div>
 
-        {puedeVerExpedienteCompleto && expedienteAbierto && (
-          <div className="bg-white border border-t-0 border-slate-200 rounded-b-2xl shadow-sm px-5 sm:px-6 pb-5 sm:pb-6 pt-4 mb-6">
-            {esFamilia && (
-              <div className="flex justify-end mb-2">
-                <Link
-                  href={`/paciente/${params.id}/scouting?modo=editar`}
-                  className="text-[#1A6BFF] text-sm font-medium hover:underline whitespace-nowrap"
-                >
-                  ✏️ Editar
-                </Link>
-              </div>
-            )}
-
-            <SeccionExpediente titulo="Datos generales" icono="👤">
-              <DatoExpediente label="Diagnósticos" valor={paciente.diagnosticos_principales?.join(", ")} />
-              <DatoExpediente label="Alergias" valor={paciente.alergias?.join(", ")} />
-              <DatoExpediente label="Tipo de sangre" valor={paciente.tipo_sangre} />
-              <DatoExpediente label="Lateralidad" valor={paciente.lateralidad} sinBorde />
-            </SeccionExpediente>
-
-            <SeccionExpediente titulo="Embarazo y nacimiento" icono="🤰">
-              <DatoExpediente label="Embarazo de alto riesgo" valor={paciente.embarazo_alto_riesgo} />
-              <DatoExpediente
-                label="Complicaciones del embarazo"
-                valor={[
-                  paciente.complicaciones_embarazo && `Complicaciones: ${paciente.complicaciones_embarazo}`,
-                  paciente.diabetes_gestacional && `Diabetes gestacional: ${paciente.diabetes_gestacional}`,
-                ].filter(Boolean).join(" · ") || null}
-              />
-              <DatoExpediente label="Semanas de gestación" valor={paciente.semanas_gestacion?.toString()} />
-              <DatoExpediente label="Tipo de parto" valor={paciente.tipo_parto} />
-              <DatoExpediente
-                label="Complicaciones al nacer"
-                valor={[
-                  paciente.complicaciones_nacimiento && `Complicaciones: ${paciente.complicaciones_nacimiento}`,
-                  paciente.peso_nacer && `Peso: ${paciente.peso_nacer}`,
-                ].filter(Boolean).join(" · ") || null}
-              />
-              <DatoExpediente
-                label="UCIN y APGAR"
-                valor={[
-                  paciente.requirio_ucin && `UCIN: ${paciente.requirio_ucin}`,
-                  paciente.apgar && `APGAR: ${paciente.apgar}`,
-                ].filter(Boolean).join(" · ") || null}
-              />
-              <DatoExpediente
-                label="Tamices neonatales"
-                valor={[paciente.tamiz_metabolico, paciente.tamiz_auditivo, paciente.tamiz_cardiaco].filter(Boolean).join(" · ") || null}
-                sinBorde
-              />
-            </SeccionExpediente>
-
-            <SeccionExpediente titulo="Desarrollo" icono="📈">
-              <DatoExpediente
-                label="Desarrollo motor"
-                valor={
-                  paciente.desarrollo_motor
-                    ? [
-                        paciente.desarrollo_motor.cabeza && `Sostuvo cabeza: ${paciente.desarrollo_motor.cabeza}`,
-                        paciente.desarrollo_motor.sentado && `Se sentó: ${paciente.desarrollo_motor.sentado}`,
-                        paciente.desarrollo_motor.gateo && `Gateo: ${paciente.desarrollo_motor.gateo}`,
-                        paciente.desarrollo_motor.camino && `Caminó: ${paciente.desarrollo_motor.camino}`,
-                        paciente.desarrollo_motor.retraso && `Retraso reportado: ${paciente.desarrollo_motor.retraso}`,
-                      ].filter(Boolean).join(" · ") || null
-                    : null
-                }
-              />
-              <DatoExpediente
-                label="Desarrollo del lenguaje"
-                valor={
-                  paciente.desarrollo_lenguaje
-                    ? [
-                        paciente.desarrollo_lenguaje.primeras_palabras && `Primeras palabras: ${paciente.desarrollo_lenguaje.primeras_palabras}`,
-                        paciente.desarrollo_lenguaje.retraso && `Retraso reportado: ${paciente.desarrollo_lenguaje.retraso}`,
-                        paciente.desarrollo_lenguaje.regresiones && `Regresiones: ${paciente.desarrollo_lenguaje.regresiones}`,
-                      ].filter(Boolean).join(" · ") || null
-                    : null
-                }
-              />
-              <DatoExpediente label="Terapias actuales" valor={paciente.terapias_actuales?.join(", ")} sinBorde />
-            </SeccionExpediente>
-
-            <SeccionExpediente titulo="Antecedentes y condiciones" icono="📋">
-              <DatoExpediente label="Antecedentes familiares" valor={formatAntecedentesFamiliares(paciente.antecedentes_familiares_detalle)} />
-              <DatoExpediente
-                label="Historial médico"
-                valor={[paciente.cirugias_previas, paciente.hospitalizaciones_previas].filter(Boolean).join(" · ") || null}
-              />
-              <DatoExpediente label="Condiciones crónicas" valor={paciente.condiciones_cronicas?.join(", ")} sinBorde />
-            </SeccionExpediente>
-
-            <SeccionExpediente titulo="Vacunas" icono="💉">
-              <DatoExpediente
-                label="Vacunas registradas"
-                valor={paciente.vacunas?.lista?.length ? paciente.vacunas.lista.join(", ") : null}
-              />
-              <DatoExpediente label="Otras vacunas" valor={paciente.vacunas_otras} sinBorde />
-            </SeccionExpediente>
-
-            <SeccionExpediente titulo="Rutinas diarias" icono="🌙">
-              <DatoExpediente
-                label="Sueño"
-                valor={paciente.sueno_hora_dormir ? `Duerme ${paciente.sueno_hora_dormir} · Despierta ${paciente.sueno_hora_despertar}${paciente.sueno_colecho ? ` · Colecho: ${paciente.sueno_colecho}` : ""}` : null}
-              />
-              <DatoExpediente label="Alimentación" valor={paciente.alimentacion_notas} sinBorde />
-            </SeccionExpediente>
-
-            <SeccionExpediente titulo="Entorno familiar" icono="🏠">
-              <DatoExpediente label="Con quién vive" valor={paciente.con_quien_vive} />
-              <DatoExpediente label="Hermanos" valor={paciente.hermanos} />
-              <DatoExpediente label="Escuela" valor={paciente.escuela_regular} sinBorde />
-            </SeccionExpediente>
-
-            <SeccionExpediente titulo="Contacto de emergencia" icono="🚨">
-              <DatoExpediente label="Nombre" valor={paciente.contacto_emergencia?.nombre} />
-              <DatoExpediente
-                label="Teléfono y parentesco"
-                valor={[paciente.contacto_emergencia?.telefono, paciente.contacto_emergencia?.parentesco].filter(Boolean).join(" · ") || null}
-              />
-              <DatoExpediente label="Hospital de preferencia" valor={paciente.hospital_preferencia} />
-              <DatoExpediente label="Médico de cabecera" valor={paciente.medico_cabecera} />
-              <DatoExpediente
-                label="Seguro médico"
-                valor={paciente.seguro_medico === "Sí" ? `Sí${paciente.aseguradora ? ` — ${paciente.aseguradora}` : ""}` : paciente.seguro_medico}
-                sinBorde
-              />
-            </SeccionExpediente>
-
-            <button
-              type="button"
-              onClick={() => setExpedienteAbierto(false)}
-              className="w-full flex items-center justify-center gap-1.5 text-[#1A6BFF] text-sm font-semibold hover:underline transition-colors py-2"
+          {/* Historial: siempre visible como acceso destacado, aunque también vive en el menú inferior */}
+          {puedeVerTimeline && (
+            <Link
+              href={`/paciente/${params.id}/timeline`}
+              className="bg-slate-50 rounded-2xl p-4 no-underline flex items-center gap-3"
             >
-              Ver menos
-              <span className="inline-block rotate-180">▾</span>
-            </button>
-          </div>
-        )}
-
-        {/* Historial / Timeline: lo más relevante, siempre arriba */}
-        {puedeVerTimeline && (
-          <Link
-            href={`/paciente/${params.id}/timeline`}
-            className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 mb-4 hover:border-[#1A6BFF] hover:shadow-md transition-all shadow-sm cursor-pointer flex items-center gap-4 no-underline"
-          >
-            <p className="text-2xl sm:text-3xl flex-shrink-0">⏱️</p>
-            <div>
-              <h2 className="text-slate-900 font-semibold text-base sm:text-lg mb-0.5">Historial de {nombreParaEquipo}</h2>
-              <p className="text-slate-500 text-xs sm:text-sm">Todo el historial cronológico del expediente, en un solo lugar</p>
-            </div>
-          </Link>
-        )}
-
-        {/* Diario combinado: sueño + evacuación + pipi nocturno, en un solo formulario */}
-        {esFamilia && (
-          <button
-            onClick={abrirDiario}
-            className="w-full bg-[#00C97A] hover:bg-green-600 text-white rounded-2xl p-4 sm:p-5 mb-6 shadow-sm transition-colors flex items-center justify-center gap-2 font-semibold text-sm sm:text-base"
-          >
-            📓 Diario de {nombreParaEquipo}
-          </button>
-        )}
-
-        {/* Grid compacta: 3 columnas en móvil, 2 desde sm+ */}
-        <div className="grid grid-cols-3 sm:grid-cols-2 gap-3 sm:gap-4">
-
-          {(esFamilia || esProfesionalClinico) && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/bitacora/sueno`}
-              emoji="😴"
-              titulo="Diario de sueño"
-              descripcion="Horas dormidas, despertares nocturnos e historial de 30 días"
-            />
+              <span className="text-lg">⏱️</span>
+              <div>
+                <p className="text-slate-800 text-sm font-semibold">Historial de {nombreParaEquipo}</p>
+                <p className="text-slate-400 text-xs">Todo el historial, en un solo lugar</p>
+              </div>
+            </Link>
           )}
-
-          {(esFamilia || esProfesionalClinico) && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/bitacora/evacuaciones`}
-              emoji="💧"
-              titulo="Evacuaciones"
-              descripcion="Galería de fotos, consistencia e historial de 30 días"
-            />
-          )}
-
-          {esFamilia && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/equipo`}
-              emoji="🩺"
-              titulo={`Equipo de ${nombreParaEquipo}`}
-              descripcion="Doctores, terapeutas y escuela vinculados"
-            />
-          )}
-
-          {esFamilia && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/bitacora-familiar`}
-              emoji="📝"
-              titulo="Bitácora familiar"
-              descripcion="Tu registro libre del día a día"
-            />
-          )}
-          {esProfesionalClinico && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/notas`}
-              emoji="📋"
-              titulo="Notas clínicas"
-              descripcion="Consultas, sesiones y reportes — puedes agregar y firmar"
-            />
-          )}
-
-          {esProfesionalClinico && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/medicamentos`}
-              emoji="💊"
-              titulo="Medicamentos"
-              descripcion="Medicamentos activos (solo lectura)"
-            />
-          )}
-
-          {esFamilia && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/medicamentos`}
-              emoji="💊"
-              titulo="Medicamentos"
-              descripcion="Medicamentos activos y quién los indicó"
-            />
-          )}
-
-          {escuelaVeMedicamentos && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/medicamentos`}
-              emoji="💊"
-              titulo="Medicamentos"
-              descripcion="Medicamentos activos (solo lectura)"
-            />
-          )}
-
-          {(esFamilia || esProfesionalClinico) && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/documentos`}
-              emoji="📁"
-              titulo="Documentos"
-              descripcion="Estudios, análisis y recetas"
-            />
-          )}
-
-          {(esFamilia || esEscuela) && (
-            <TarjetaCompacta
-              href={`/paciente/${params.id}/recomendaciones`}
-              emoji="📝"
-              titulo="Recomendaciones"
-              descripcion="Indicaciones del equipo para el entorno escolar"
-            />
-          )}
-
         </div>
 
         {esEscuela && (
-          <p className="text-slate-400 text-xs mt-6 text-center">
+          <p className="text-slate-400 text-xs mt-4 text-center">
             Como escuela, tu acceso está limitado a las recomendaciones para el entorno escolar{(permisosEscuela.puede_ver_medicamentos || permisosEscuela.puede_ver_timeline) ? ', más lo que la familia te haya habilitado.' : '.'}
           </p>
         )}
-
       </div>
 
-      {/* Modal: Diario combinado */}
+      {/* Modal: Diario combinado (idéntico al original, sin cambios de lógica) */}
       {diarioAbierto && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl max-h-[90vh] overflow-y-auto">
@@ -967,7 +920,6 @@ export default function ExpedientePaciente() {
 
                 <div className="flex flex-col gap-4">
 
-                  {/* Registro de sueño: Se durmió + Despertó, envueltos en una sola caja */}
                   <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-4">
                     <div>
                       <label className="text-slate-500 text-xs mb-1 block font-medium">😴 Se durmió</label>
@@ -1028,7 +980,6 @@ export default function ExpedientePaciente() {
                     </div>
                   </div>
 
-                  {/* Pipi nocturno: fecha propia, independiente de la fecha de Despertó */}
                   <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-3">
                     <div>
                       <label className="text-slate-500 text-xs mb-1 block font-medium">Fecha del pipi nocturno</label>
@@ -1059,7 +1010,6 @@ export default function ExpedientePaciente() {
 
                   <div className="border-t border-slate-100" />
 
-                  {/* Evacuación: fecha, foto, pregunta, observación y nota — todo siempre visible */}
                   <div className="bg-slate-50 rounded-xl p-4 flex flex-col gap-3">
                     <div>
                       <label className="text-slate-500 text-xs mb-1 block font-medium">Fecha de la evacuación</label>
@@ -1138,6 +1088,19 @@ export default function ExpedientePaciente() {
           </div>
         </div>
       )}
+
+      {(esFamilia || esProfesionalClinico || esEscuela) && (
+        <BottomNav pacienteId={params.id as string} activo="inicio" />
+      )}
     </main>
   );
+}
+
+function calcularEdad(fecha: string) {
+  const hoy = new Date();
+  const nac = new Date(fecha);
+  let edad = hoy.getFullYear() - nac.getFullYear();
+  const m = hoy.getMonth() - nac.getMonth();
+  if (m < 0 || (m === 0 && hoy.getDate() < nac.getDate())) edad--;
+  return edad;
 }
