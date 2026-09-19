@@ -101,13 +101,13 @@ export default function RecomendacionesPage() {
   }
 
   if (loading) return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+    <main className="min-h-screen bg-white flex items-center justify-center">
       <p className="text-slate-400">Cargando recomendaciones...</p>
     </main>
   )
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen bg-white">
       <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
@@ -148,7 +148,7 @@ export default function RecomendacionesPage() {
         )}
 
         {mostrarForm && (
-          <div className="bg-white border border-slate-200 rounded-2xl p-6 mb-6 shadow-sm">
+          <div className="bg-slate-50 rounded-2xl p-6 mb-6">
             <h2 className="text-slate-900 font-semibold mb-4">Nueva recomendación</h2>
 
             <div className="mb-4">
@@ -194,7 +194,7 @@ export default function RecomendacionesPage() {
         )}
 
         {recomendaciones.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+          <div className="bg-slate-50 rounded-2xl p-12 text-center">
             <p className="text-4xl mb-4">📝</p>
             <p className="text-slate-900 font-semibold mb-2">Sin recomendaciones aún</p>
             <p className="text-slate-500 text-sm">
@@ -206,7 +206,7 @@ export default function RecomendacionesPage() {
         ) : (
           <div className="flex flex-col gap-4">
             {recomendaciones.map(rec => (
-              <div key={rec.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+              <div key={rec.id} className="bg-slate-50 rounded-2xl p-6">
                 <div className="flex items-start justify-between gap-4 mb-3">
                   <h3 className="text-slate-900 font-semibold">{rec.titulo}</h3>
                   <span className="text-xs text-slate-400 whitespace-nowrap">{formatFecha(rec.created_at)}</span>

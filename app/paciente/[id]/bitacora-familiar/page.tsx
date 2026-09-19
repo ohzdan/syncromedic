@@ -213,13 +213,13 @@ export default function BitacoraFamiliarPage() {
   const nombreParaTitulo = paciente?.apodo || paciente?.nombre;
 
   if (loading) return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+    <main className="min-h-screen bg-white flex items-center justify-center">
       <p className="text-slate-400">Cargando...</p>
     </main>
   );
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen bg-white">
       <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <Link href="/dashboard" className="flex items-center gap-2 no-underline">
           <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
@@ -255,7 +255,7 @@ export default function BitacoraFamiliarPage() {
         </p>
 
         {entradas.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+          <div className="bg-slate-50 rounded-2xl p-12 text-center">
             <div className="text-4xl mb-3">📝</div>
             <p className="text-slate-500 text-sm">Aún no hay entradas en la bitácora.</p>
             {esFamilia && (
@@ -270,7 +270,7 @@ export default function BitacoraFamiliarPage() {
         ) : (
           <div className="flex flex-col gap-4">
             {entradas.map((entrada) => (
-              <div key={entrada.id} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+              <div key={entrada.id} className="bg-slate-50 rounded-2xl p-5">
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <p className="text-slate-400 text-xs font-medium">{formatFecha(entrada.fecha)}</p>

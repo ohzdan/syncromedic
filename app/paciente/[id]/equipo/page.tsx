@@ -114,7 +114,7 @@ export default function EquipoMedico() {
   const nombreParaTitulo = paciente?.apodo || paciente?.nombre
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen bg-white">
       <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <Link href="/dashboard" className="flex items-center gap-2 no-underline">
           <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
@@ -150,7 +150,7 @@ export default function EquipoMedico() {
         {loading ? (
           <p className="text-slate-400 text-sm">Cargando...</p>
         ) : equipo.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+          <div className="bg-slate-50 rounded-2xl p-12 text-center">
             <p className="text-4xl mb-4">🩺</p>
             <h2 className="text-slate-900 font-semibold mb-2">Sin especialistas vinculados</h2>
             <p className="text-slate-500 text-sm mb-6">Invita al primer médico para que pueda ver el expediente</p>
@@ -168,7 +168,7 @@ export default function EquipoMedico() {
             {equipo.map((medico) => {
               const esEscuela = medico.role === 'escuela'
               return (
-                <div key={medico.id} className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+                <div key={medico.id} className="bg-slate-50 rounded-2xl p-6">
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-xl flex-shrink-0">
                       {esEscuela ? '🏫' : '🩺'}

@@ -165,13 +165,13 @@ export default function DocumentosPage() {
   const docsFiltrados = filtro === "todos" ? documentos : documentos.filter(d => (d.categoria || d.tipo) === filtro);
 
   if (loading) return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+    <main className="min-h-screen bg-white flex items-center justify-center">
       <p className="text-slate-400">Cargando...</p>
     </main>
   );
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen bg-white">
       <nav className="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-[#00C97A] flex items-center justify-center">
@@ -211,7 +211,7 @@ export default function DocumentosPage() {
         </div>
 
         {docsFiltrados.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
+          <div className="bg-slate-50 rounded-2xl p-12 text-center">
             <div className="text-4xl mb-3">📂</div>
             <p className="text-slate-500 text-sm">
               {filtro === "todos" ? "Aún no hay documentos en este expediente." : "No hay documentos en esta categoría."}
@@ -229,7 +229,7 @@ export default function DocumentosPage() {
               const esImagen = doc.tipo_archivo?.startsWith("image/");
               const fecha = new Date(doc.created_at).toLocaleDateString("es-MX", { day: "numeric", month: "short", year: "numeric" });
               return (
-                <div key={doc.id} className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex items-center gap-4">
+                <div key={doc.id} className="bg-slate-50 rounded-2xl p-4 flex items-center gap-4">
                   <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center text-2xl flex-shrink-0">
                     {esImagen ? "🖼️" : cat?.emoji || "📄"}
                   </div>
