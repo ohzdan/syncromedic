@@ -840,9 +840,6 @@ export default function ExpedientePaciente() {
                     {esFamilia && (
                       <AccesoAcordeon href={`/paciente/${params.id}/bitacora-familiar`} icono="📝" label="Bitácora familiar" />
                     )}
-                    {esProfesionalClinico && (
-                      <AccesoAcordeon href={`/paciente/${params.id}/notas`} icono="📋" label="Notas clínicas" />
-                    )}
                     {(esFamilia || esEscuela) && (
                       <AccesoAcordeon href={`/paciente/${params.id}/recomendaciones`} icono="📝" label="Recomendaciones" />
                     )}
