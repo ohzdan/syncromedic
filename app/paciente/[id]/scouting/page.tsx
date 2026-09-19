@@ -354,7 +354,7 @@ const searchParams = useSearchParams();
   );
 
   if (loading) return (
-    <main className="min-h-screen bg-slate-50 flex items-center justify-center">
+    <main className="min-h-screen bg-white flex items-center justify-center">
       <p className="text-slate-400">Cargando...</p>
     </main>
   );
@@ -362,7 +362,7 @@ const searchParams = useSearchParams();
   const pantalla = FLUJO[indice];
 
   if (pantalla.tipo === "intro") return (
-    <main className="min-h-screen bg-slate-50 flex flex-col">
+    <main className="min-h-screen bg-white flex flex-col">
       <Nav />
       <div className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-md text-center">
@@ -381,12 +381,13 @@ const searchParams = useSearchParams();
   );
 
   if (pantalla.tipo === "intermedia") return (
-    <main className="min-h-screen bg-slate-50 flex flex-col">
+    <main className="min-h-screen bg-white flex flex-col">
       <Nav />
       <div className="flex-1 flex items-center justify-center px-6">
         <div className="max-w-md text-center">
           <h2 className="text-slate-800 text-2xl font-bold mb-3">{pantalla.mensaje}</h2>
           <p className="text-slate-500 text-base mb-8">{pantalla.submensaje}</p>
+          <p className="text-slate-400 text-xs mb-2">{pasosCompletados} de {pasosTotales} pasos · {progreso}%</p>
           <div className="w-full bg-slate-200 rounded-full h-2 mb-8">
             <div className="bg-[#1A6BFF] h-2 rounded-full transition-all duration-500" style={{ width: `${progreso}%` }} />
           </div>
@@ -398,7 +399,7 @@ const searchParams = useSearchParams();
   );
 
   if (pantalla.tipo === "resumen") return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen bg-white">
       <Nav />
       <div className="max-w-xl mx-auto px-6 py-10">
         <div className="text-center mb-8">
@@ -406,7 +407,7 @@ const searchParams = useSearchParams();
           <h1 className="text-slate-800 text-2xl font-bold mb-2">Perfil completado</h1>
           <p className="text-slate-500 text-sm">El expediente de {paciente?.nombre} está listo. Tus doctores ya pueden verlo.</p>
         </div>
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mb-6 flex flex-col">
+        <div className="bg-slate-50 rounded-2xl p-6 mb-6 flex flex-col">
           <ResumenItem label="Diagnósticos" valor={paciente?.diagnosticos_principales?.join(", ")} onEditar={() => irAPaso("diagnosticos")} />
           <ResumenItem label="Alergias" valor={paciente?.alergias?.join(", ")} onEditar={() => irAPaso("alergias")} />
           <ResumenItem label="Tipo de sangre" valor={paciente?.tipo_sangre} onEditar={() => irAPaso("tipo_sangre")} />
@@ -474,12 +475,12 @@ const searchParams = useSearchParams();
   const pasoId = (pantalla as { tipo: "paso"; id: string }).id;
 
   return (
-    <main className="min-h-screen bg-slate-50">
+    <main className="min-h-screen bg-white">
       <Nav />
       <div className="max-w-xl mx-auto px-6 py-8">
         <div className="mb-8">
           <div className="flex justify-between text-xs text-slate-400 mb-2">
-            <span>Perfil base de {paciente?.nombre}</span>
+            <span>Paso {pasosCompletados + 1} de {pasosTotales}</span>
             <span>{progreso}% completado</span>
           </div>
           <div className="w-full bg-slate-200 rounded-full h-2">
@@ -487,7 +488,7 @@ const searchParams = useSearchParams();
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-2xl p-8 shadow-sm">
+        <div className="bg-slate-50 rounded-2xl p-6">
 
           {pasoId === "diagnosticos" && <PasoTags titulo="Diagnósticos principales" descripcion="¿Cuáles son las condiciones o diagnósticos que tiene tu hijo/a?" ayuda="Agrega uno por uno. Puedes incluir la fecha aproximada entre paréntesis." placeholder="Ej: Autismo nivel 2" tags={tags} tagInput={tagInput} onInputChange={setTagInput} onAgregar={agregarTag} onQuitar={(t: string) => setTags(tags.filter((x: string) => x !== t))} />}
 
